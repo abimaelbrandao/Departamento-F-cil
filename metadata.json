@@ -1,0 +1,6 @@
+{
+  "name": "Departamento Fácil",
+  "description": "Sistema completo de Departamento Pessoal para empresas brasileiras e escritórios de contabilidade. Gestão de admissão a desligamento, folha de pagamento, férias, rescisão, contratos, eSocial e portal do colaborador.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
