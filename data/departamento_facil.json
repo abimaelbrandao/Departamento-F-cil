@@ -1,0 +1,2712 @@
+{
+  "empresas": [
+    {
+      "id": "emp-1",
+      "razaoSocial": "TechVale Soluções em Tecnologia Ltda",
+      "nomeFantasia": "TechVale Sistemas",
+      "cnpj": "45892124000189",
+      "inscricaoEstadual": "114.882.901.110",
+      "inscricaoMunicipal": "9.344.201-8",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "fpas": "515",
+      "aliquotaRat": 1,
+      "fap": 1,
+      "aliquotaTerceiros": 0,
+      "cnaePrincipal": "62.01-5-00 - Desenvolvimento de programas de computador",
+      "endereco": {
+        "logradouro": "Av. Paulista",
+        "numero": "1374",
+        "bairro": "Bela Vista",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01310-100"
+      },
+      "contatoResponsavel": {
+        "nome": "Renata Albuquerque",
+        "email": "dp@techvale.com.br",
+        "telefone": "(11) 3455-8900"
+      },
+      "bancoConvenio": "Banco Itaú (341) - Agência 0340",
+      "configuracoesFolha": {
+        "diaPagamentoSalario": 5,
+        "diaAdiantamento": 20,
+        "percentualAdiantamento": 40,
+        "diaVencimentoFGTS": 20,
+        "diaVencimentoDCTFWeb": 15
+      }
+    },
+    {
+      "id": "emp-2",
+      "razaoSocial": "Construtora Horizonte Brasil S/A",
+      "nomeFantasia": "Horizonte Engenharia",
+      "cnpj": "18234901000132",
+      "inscricaoEstadual": "87.123.456",
+      "inscricaoMunicipal": "450.129/001-2",
+      "regimeTributario": "LUCRO_PRESUMIDO",
+      "fpas": "507",
+      "aliquotaRat": 3,
+      "fap": 1.2,
+      "aliquotaTerceiros": 5.8,
+      "cnaePrincipal": "41.20-4-00 - Construção de edifícios",
+      "endereco": {
+        "logradouro": "Av. Rio Branco",
+        "numero": "500",
+        "bairro": "Centro",
+        "cidade": "Rio de Janeiro",
+        "uf": "RJ",
+        "cep": "20040-002"
+      },
+      "contatoResponsavel": {
+        "nome": "Marcos Vinícius Costa",
+        "email": "dp@horizontebrasil.com.br",
+        "telefone": "(21) 2290-7711"
+      },
+      "bancoConvenio": "Banco do Brasil (001) - Agência 1234",
+      "configuracoesFolha": {
+        "diaPagamentoSalario": 5,
+        "diaAdiantamento": 20,
+        "percentualAdiantamento": 40,
+        "diaVencimentoFGTS": 20,
+        "diaVencimentoDCTFWeb": 15
+      }
+    },
+    {
+      "id": "emp-3",
+      "razaoSocial": "SUZY KIDS LTDA",
+      "nomeFantasia": "Suzy Kids Confecções",
+      "cnpj": "52905151000192",
+      "inscricaoEstadual": "12.345.678-9",
+      "inscricaoMunicipal": "987.654",
+      "codigoMunicipio": "11300",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "fpas": "515",
+      "aliquotaRat": 1,
+      "fap": 1,
+      "aliquotaTerceiros": 0,
+      "cnaePrincipal": "4781-4/00 - Comércio varejista de artigos do vestuário e acessórios",
+      "endereco": {
+        "logradouro": "AV JOSE SARNEY",
+        "numero": "83",
+        "bairro": "SAO RAIMUNDO",
+        "cidade": "São Luís",
+        "uf": "MA",
+        "cep": "65085-470"
+      },
+      "contatoResponsavel": {
+        "nome": "Suzy Silva",
+        "email": "contato@suzykids.com.br",
+        "telefone": "(98) 3221-4455"
+      },
+      "bancoConvenio": "Banco Bradesco (237) - Agência 0102",
+      "configuracoesFolha": {
+        "diaPagamentoSalario": 5,
+        "diaAdiantamento": 20,
+        "percentualAdiantamento": 40,
+        "diaVencimentoFGTS": 20,
+        "diaVencimentoDCTFWeb": 15
+      }
+    },
+    {
+      "id": "emp-emplast",
+      "razaoSocial": "EMPLAST COMERCIO E SERVICOS LTDA ME",
+      "nomeFantasia": "Emplast Comércio e Serviços",
+      "cnpj": "01386967000116",
+      "inscricaoEstadual": "111.222.333.444",
+      "inscricaoMunicipal": "55.667.889-0",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "fpas": "515",
+      "aliquotaRat": 1,
+      "fap": 1,
+      "aliquotaTerceiros": 0,
+      "cnaePrincipal": "46.49-4-08 - Comércio atacadista de produtos de higiene, limpeza e conservação domiciliar",
+      "endereco": {
+        "logradouro": "Rua das Indústrias",
+        "numero": "200",
+        "bairro": "Distrito Industrial",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "04795-100"
+      },
+      "contatoResponsavel": {
+        "nome": "Mauro Henrique Costa Matos",
+        "email": "mauro@emplast.com.br",
+        "telefone": "(11) 3210-9876"
+      },
+      "bancoConvenio": "Banco do Brasil (001)",
+      "configuracoesFolha": {
+        "diaPagamentoSalario": 5,
+        "diaAdiantamento": 20,
+        "percentualAdiantamento": 40,
+        "diaVencimentoFGTS": 20,
+        "diaVencimentoDCTFWeb": 15
+      }
+    }
+  ],
+  "empregados": [
+    {
+      "id": "emp-lucas",
+      "empresaId": "emp-1",
+      "matricula": "00101",
+      "nomeCompleto": "Lucas Gabriel de Albuquerque",
+      "cpf": "38829104812",
+      "rg": "44.891.201-9",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "128.94012.89-1",
+      "dataNascimento": "1992-04-14",
+      "sexo": "M",
+      "estadoCivil": "CASADO",
+      "nacionalidade": "Brasileira",
+      "email": "lucas.albuquerque@techvale.com.br",
+      "telefone": "(11) 98711-2044",
+      "endereco": {
+        "logradouro": "Rua Vergueiro",
+        "numero": "2050",
+        "bairro": "Vila Mariana",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "04102-000"
+      },
+      "dadosBancarios": {
+        "banco": "Itaú Unibanco",
+        "codigoBanco": "341",
+        "agencia": "0340",
+        "conta": "98412-4",
+        "tipoConta": "CORRENTE",
+        "chavePix": "38829104812"
+      },
+      "vinculo": "CLT",
+      "status": "ativo",
+      "dataAdmissao": "2022-03-10",
+      "cargo": "Engenheiro de Software Sênior",
+      "cbo": "2124-05",
+      "departamento": "Engenharia de Tecnologia",
+      "centroDeCusto": "CC-01 TI & Inovação",
+      "salarioBase": 9200,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 40,
+      "divisorHoras": 200,
+      "escala": "Segunda a Sexta (09:00 às 18:00)",
+      "tipoContrato": "INDETERMINADO",
+      "dependentes": [
+        {
+          "id": "dep-1",
+          "nome": "Enzo Gabriel de Albuquerque",
+          "parentesco": "FILHO",
+          "dataNascimento": "2019-06-12",
+          "cpf": "512.981.048-22",
+          "irrf": true,
+          "salarioFamilia": false
+        },
+        {
+          "id": "dep-2",
+          "nome": "Camila de Albuquerque",
+          "parentesco": "CONJUGE",
+          "dataNascimento": "1994-09-20",
+          "cpf": "419.012.848-11",
+          "irrf": true,
+          "salarioFamilia": false
+        }
+      ],
+      "beneficios": [
+        {
+          "id": "ben-1",
+          "nome": "Vale Transporte",
+          "tipo": "VALE_TRANSPORTE",
+          "valorBeneficio": 480,
+          "descontoEmpregado": 480,
+          "percentualDesconto": 6,
+          "ativo": true
+        },
+        {
+          "id": "ben-2",
+          "nome": "Vale Refeição / Alimentação",
+          "tipo": "VALE_REFEICAO",
+          "valorBeneficio": 950,
+          "descontoEmpregado": 50,
+          "ativo": true
+        }
+      ],
+      "documentosAdmissao": [
+        {
+          "id": "doc-1",
+          "nome": "RG e CPF",
+          "tipo": "RG",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-2",
+          "nome": "CTPS Digital",
+          "tipo": "CTPS",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-3",
+          "nome": "Comprovante de Residência",
+          "tipo": "COMPROVANTE_RESIDENCIA",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-4",
+          "nome": "Atestado de Saúde Ocupacional (ASO)",
+          "tipo": "EXAME_ADMISSIONAL_ASO",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        }
+      ],
+      "historicoAlteracoes": [
+        {
+          "id": "hist-1",
+          "dataVigencia": "2024-01-01",
+          "dataRegistro": "2024-01-05",
+          "tipo": "SALARIO",
+          "valorAnterior": 8200,
+          "valorNovo": 9200,
+          "motivo": "Promoção por mérito e desempenho técnico sênior",
+          "responsavel": "Renata Albuquerque (DP)"
+        }
+      ],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08
+    },
+    {
+      "id": "emp-mariana",
+      "empresaId": "emp-1",
+      "matricula": "00102",
+      "nomeCompleto": "Mariana Ribeiro Costa",
+      "cpf": "41289123890",
+      "rg": "39.124.502-1",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "130.88412.90-4",
+      "dataNascimento": "1995-11-25",
+      "sexo": "F",
+      "estadoCivil": "SOLTEIRO",
+      "nacionalidade": "Brasileira",
+      "email": "mariana.costa@techvale.com.br",
+      "telefone": "(11) 97123-5566",
+      "endereco": {
+        "logradouro": "Rua Augusta",
+        "numero": "900",
+        "bairro": "Consolação",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01304-001"
+      },
+      "dadosBancarios": {
+        "banco": "Nubank (260)",
+        "codigoBanco": "260",
+        "agencia": "0001",
+        "conta": "1294812-9",
+        "tipoConta": "CORRENTE",
+        "chavePix": "mariana.costa@techvale.com.br"
+      },
+      "vinculo": "CLT",
+      "status": "ativo",
+      "dataAdmissao": "2023-05-15",
+      "cargo": "Analista de Recursos Humanos Pleno",
+      "cbo": "2524-05",
+      "departamento": "Gente e Gestão",
+      "centroDeCusto": "CC-02 Administrativo",
+      "salarioBase": 4600,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 44,
+      "divisorHoras": 220,
+      "escala": "Segunda a Sexta (08:00 às 17:48)",
+      "tipoContrato": "INDETERMINADO",
+      "dependentes": [
+        {
+          "id": "dep-mariana-1",
+          "nome": "Laura Ribeiro",
+          "parentesco": "FILHO",
+          "dataNascimento": "2021-08-10",
+          "cpf": "589.124.018-09",
+          "irrf": true,
+          "salarioFamilia": false
+        }
+      ],
+      "beneficios": [
+        {
+          "id": "ben-m1",
+          "nome": "Vale Transporte",
+          "tipo": "VALE_TRANSPORTE",
+          "valorBeneficio": 380,
+          "descontoEmpregado": 276,
+          "percentualDesconto": 6,
+          "ativo": true
+        },
+        {
+          "id": "ben-m2",
+          "nome": "Vale Refeição",
+          "tipo": "VALE_REFEICAO",
+          "valorBeneficio": 800,
+          "descontoEmpregado": 40,
+          "ativo": true
+        }
+      ],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08
+    },
+    {
+      "id": "emp-carlos",
+      "empresaId": "emp-1",
+      "matricula": "00103",
+      "nomeCompleto": "Carlos Eduardo dos Santos",
+      "cpf": "29871145802",
+      "rg": "50.112.441-X",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "139.11284.55-2",
+      "dataNascimento": "2001-08-05",
+      "sexo": "M",
+      "estadoCivil": "SOLTEIRO",
+      "nacionalidade": "Brasileira",
+      "email": "carlos.santos@techvale.com.br",
+      "telefone": "(11) 96102-4411",
+      "endereco": {
+        "logradouro": "Rua Domingos de Morais",
+        "numero": "120",
+        "bairro": "Vila Mariana",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "04010-000"
+      },
+      "dadosBancarios": {
+        "banco": "Banco Santander",
+        "codigoBanco": "033",
+        "agencia": "2044",
+        "conta": "01049214-5",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "CLT",
+      "status": "ativo",
+      "dataAdmissao": "2026-03-20",
+      "cargo": "Assistente Administrativo Júnior",
+      "cbo": "4110-10",
+      "departamento": "Financeiro e DP",
+      "centroDeCusto": "CC-02 Administrativo",
+      "salarioBase": 2600,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 44,
+      "divisorHoras": 220,
+      "escala": "Segunda a Sexta (08:30 às 18:18)",
+      "tipoContrato": "EXPERIENCIA_45_45",
+      "diasExperienciaTotal": 90,
+      "dataFimExperiencia1": "2026-05-03",
+      "dataFimExperiencia2": "2026-06-17",
+      "dependentes": [],
+      "beneficios": [
+        {
+          "id": "ben-c1",
+          "nome": "Vale Transporte",
+          "tipo": "VALE_TRANSPORTE",
+          "valorBeneficio": 320,
+          "descontoEmpregado": 156,
+          "percentualDesconto": 6,
+          "ativo": true
+        }
+      ],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08
+    },
+    {
+      "id": "emp-beatriz",
+      "empresaId": "emp-1",
+      "matricula": "00104",
+      "nomeCompleto": "Beatriz Helena Lima",
+      "cpf": "18944120899",
+      "rg": "33.901.884-2",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "124.99120.33-8",
+      "dataNascimento": "1988-02-17",
+      "sexo": "F",
+      "estadoCivil": "CASADO",
+      "nacionalidade": "Brasileira",
+      "email": "beatriz.lima@techvale.com.br",
+      "telefone": "(11) 99182-3344",
+      "endereco": {
+        "logradouro": "Al. Santos",
+        "numero": "700",
+        "bairro": "Cerqueira César",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01418-002"
+      },
+      "dadosBancarios": {
+        "banco": "Banco Bradesco (237)",
+        "codigoBanco": "237",
+        "agencia": "1450",
+        "conta": "0041289-1",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "CLT",
+      "status": "ferias",
+      "dataAdmissao": "2021-08-01",
+      "cargo": "Gerente de Produto e Operações",
+      "cbo": "1423-05",
+      "departamento": "Diretoria de Operações",
+      "centroDeCusto": "CC-01 TI & Inovação",
+      "salarioBase": 12500,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 40,
+      "divisorHoras": 200,
+      "escala": "Segunda a Sexta (09:00 às 18:00)",
+      "tipoContrato": "INDETERMINADO",
+      "dependentes": [
+        {
+          "id": "dep-b1",
+          "nome": "Felipe Lima Rocha",
+          "parentesco": "FILHO",
+          "dataNascimento": "2018-03-01",
+          "cpf": "501.992.118-20",
+          "irrf": true,
+          "salarioFamilia": false
+        }
+      ],
+      "beneficios": [],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08
+    },
+    {
+      "id": "emp-juliana-adm",
+      "empresaId": "emp-1",
+      "matricula": "00105",
+      "nomeCompleto": "Juliana Mendes Silva",
+      "cpf": "45012389104",
+      "rg": "42.901.203-7",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "138.99014.22-9",
+      "dataNascimento": "1997-07-19",
+      "sexo": "F",
+      "estadoCivil": "SOLTEIRO",
+      "nacionalidade": "Brasileira",
+      "email": "juliana.mendes@email.com",
+      "telefone": "(11) 98234-9988",
+      "endereco": {
+        "logradouro": "Rua Pamplona",
+        "numero": "450",
+        "bairro": "Jardim Paulista",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01405-000"
+      },
+      "dadosBancarios": {
+        "banco": "Banco Inter (077)",
+        "codigoBanco": "077",
+        "agencia": "0001",
+        "conta": "5590123-8",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "CLT",
+      "status": "em_admissao",
+      "dataAdmissao": "2026-06-01",
+      "dataPrevisaoInicio": "2026-06-01",
+      "cargo": "Designer de Interface UI/UX",
+      "cbo": "2624-10",
+      "departamento": "Design & Produto",
+      "centroDeCusto": "CC-01 TI & Inovação",
+      "salarioBase": 5800,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 40,
+      "divisorHoras": 200,
+      "escala": "Segunda a Sexta (09:00 às 18:00)",
+      "tipoContrato": "EXPERIENCIA_45_45",
+      "dependentes": [],
+      "beneficios": [
+        {
+          "id": "ben-j1",
+          "nome": "Vale Transporte",
+          "tipo": "VALE_TRANSPORTE",
+          "valorBeneficio": 440,
+          "descontoEmpregado": 348,
+          "percentualDesconto": 6,
+          "ativo": true
+        }
+      ],
+      "documentosAdmissao": [
+        {
+          "id": "doc-j1",
+          "nome": "Documento de Identidade (RG/CNH)",
+          "tipo": "RG",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-j2",
+          "nome": "Cadastro de Pessoa Física (CPF)",
+          "tipo": "CPF",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-j3",
+          "nome": "Comprovante de Residência Atualizado",
+          "tipo": "COMPROVANTE_RESIDENCIA",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        },
+        {
+          "id": "doc-j4",
+          "nome": "Atestado de Saúde Ocupacional (ASO Admissional)",
+          "tipo": "EXAME_ADMISSIONAL_ASO",
+          "obrigatorio": true,
+          "recebido": false,
+          "status": "pendente",
+          "observacoes": "Exame agendado para 28/05/2026 na clínica conveniada"
+        },
+        {
+          "id": "doc-j5",
+          "nome": "Carteira de Trabalho Digital (Número/Série)",
+          "tipo": "CTPS",
+          "obrigatorio": true,
+          "recebido": true,
+          "status": "validado"
+        }
+      ],
+      "historicoAlteracoes": [],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08
+    },
+    {
+      "id": "emp-diretor-marcos",
+      "empresaId": "emp-1",
+      "matricula": "00027",
+      "nomeCompleto": "Marcos Vinícius da Silva Costa",
+      "cpf": "10984123891",
+      "rg": "32.145.890-2",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "124.89012.33-4",
+      "dataNascimento": "1980-04-12",
+      "sexo": "M",
+      "estadoCivil": "CASADO",
+      "nacionalidade": "Brasileira",
+      "email": "marcos.costa@techvale.com.br",
+      "telefone": "(11) 99876-1234",
+      "endereco": {
+        "logradouro": "Al. Lorena",
+        "numero": "1420",
+        "bairro": "Jardim Paulista",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01424-001"
+      },
+      "dadosBancarios": {
+        "banco": "Banco Itaú",
+        "codigoBanco": "341",
+        "agencia": "0340",
+        "conta": "45012-9",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "DIRETOR_ESTATUTARIO",
+      "status": "ativo",
+      "dataAdmissao": "2020-01-02",
+      "cargo": "Diretor Presidente / Sócio Administrador",
+      "cbo": "1210-10",
+      "departamento": "Diretoria Executiva",
+      "centroDeCusto": "CC-00 Presidência",
+      "salarioBase": 7786.02,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 40,
+      "divisorHoras": 200,
+      "escala": "Livre / Estatutário",
+      "tipoContrato": "INDETERMINADO",
+      "dependentes": [
+        {
+          "id": "dep-m-1",
+          "nome": "Helena Costa",
+          "parentesco": "FILHO",
+          "dataNascimento": "2016-09-14",
+          "cpf": "512.334.891-01",
+          "irrf": true,
+          "salarioFamilia": false
+        }
+      ],
+      "beneficios": [],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": false,
+      "aliquotaFGTS": 0
+    },
+    {
+      "id": "emp-edenir",
+      "empresaId": "emp-3",
+      "matricula": "000001",
+      "matriculaESocial": "52923584368101010720250101",
+      "nomeCompleto": "EDENIR GARCIA PEREIRA",
+      "cpf": "52923584368",
+      "rg": "0468430220120",
+      "orgaoExpedidor": "SSP",
+      "rgUF": "MA",
+      "rgDataEmissao": "2012-11-27",
+      "pis": "124.766.396.90",
+      "dataNascimento": "1974-12-16",
+      "naturalidade": "Peri Mirim",
+      "naturalidadeUF": "MA",
+      "nacionalidadeCodigo": "10",
+      "nacionalidade": "Brasileira",
+      "etniaRaca": "Parda",
+      "grauInstrucao": "Ensino Médio completo",
+      "nomePai": "ALBERTO PEREIRA",
+      "nomeMae": "FABRICIANA GARCIA PEREIRA",
+      "ctpsNumero": "00000842279",
+      "ctpsSerie": "00050",
+      "ctpsDV": "",
+      "ctpsUF": "MA",
+      "ctpsDataEmissao": "2015-04-29",
+      "tituloEleitor": "023373011163",
+      "tituloZona": "001",
+      "tituloSecao": "0664",
+      "sexo": "F",
+      "estadoCivil": "SOLTEIRO",
+      "email": "edenir.pereira@suzykids.com.br",
+      "telefone": "(98) 98844-1234",
+      "endereco": {
+        "logradouro": "RUA 22",
+        "numero": "22 QD46",
+        "bairro": "VL M FECURY 2",
+        "cidade": "São Luís",
+        "uf": "MA",
+        "cep": "65082-491"
+      },
+      "dadosBancarios": {
+        "banco": "Banco Bradesco",
+        "codigoBanco": "237",
+        "agencia": "0102",
+        "conta": "54321-0",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "CLT",
+      "status": "ativo",
+      "dataAdmissao": "2025-07-01",
+      "cargo": "VENDEDOR(A)",
+      "cbo": "5211-10",
+      "departamento": "001- GERAL",
+      "centroDeCusto": "CC-02 Comercial",
+      "salarioBase": 1787.3,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 44,
+      "divisorHoras": 220,
+      "escala": "4 - JORNADA COM HORÁRIO DIÁRIO FIXO E FOLGA FIXA (NO DOMINGO)",
+      "tipoContrato": "EXPERIENCIA_45_45",
+      "diasExperienciaTotal": 45,
+      "participaCIPA": false,
+      "dataUltimoASO": "2025-07-01",
+      "dependentes": [],
+      "beneficios": [],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": true,
+      "aliquotaFGTS": 0.08,
+      "codigoSindical": "000.000.00000-0",
+      "sindicatoLaboral": "06.302.632/0001-96 - SINDICATO DOS COMERCIARIOS",
+      "pensaoAlimenticiaPercentualTRCT": 0,
+      "pensaoAlimenticiaPercentualFGTS": 0,
+      "categoriaTrabalhador": "01 - Empregado"
+    },
+    {
+      "id": "emp-mauro",
+      "empresaId": "emp-emplast",
+      "matricula": "000002",
+      "nomeCompleto": "MAURO HENRIQUE COSTA MATOS",
+      "cpf": "56359616149",
+      "rg": "28.456.789-0",
+      "orgaoExpedidor": "SSP/SP",
+      "pis": "120.45678.90-1",
+      "dataNascimento": "1982-03-10",
+      "sexo": "M",
+      "estadoCivil": "CASADO",
+      "nacionalidade": "Brasileira",
+      "email": "mauro.matos@emplast.com.br",
+      "telefone": "(11) 98765-4321",
+      "endereco": {
+        "logradouro": "Av. Paulista",
+        "numero": "1000",
+        "bairro": "Bela Vista",
+        "cidade": "São Paulo",
+        "uf": "SP",
+        "cep": "01310-100"
+      },
+      "dadosBancarios": {
+        "banco": "",
+        "codigoBanco": "",
+        "agencia": "",
+        "conta": "",
+        "tipoConta": "CORRENTE"
+      },
+      "vinculo": "DIRETOR_ESTATUTARIO",
+      "status": "ativo",
+      "dataAdmissao": "2019-01-01",
+      "cargo": "ADMINISTRADOR",
+      "cbo": "1210-10",
+      "departamento": "ADMINISTRAÇÃO",
+      "centroDeCusto": "ADMINISTRAÇÃO",
+      "salarioBase": 1621,
+      "tipoSalario": "MENSALISTA",
+      "jornadaHorasSemanais": 44,
+      "divisorHoras": 220,
+      "escala": "Livre / Estatutário",
+      "tipoContrato": "INDETERMINADO",
+      "dependentes": [],
+      "beneficios": [],
+      "documentosAdmissao": [],
+      "historicoAlteracoes": [],
+      "optanteFGTS": false,
+      "aliquotaFGTS": 0,
+      "categoriaTrabalhador": "11 - Diretor não empregado"
+    }
+  ],
+  "rubricas": [
+    {
+      "codigo": "0001",
+      "descricao": "Salário Mensal Contratual",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "incideDSR": false,
+      "baseCalculoLegal": "Art. 457 da CLT",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0015",
+      "descricao": "Salário-Família Previdenciário",
+      "tipo": "PROVENTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Art. 65 a 70 da Lei 8.213/91",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0020",
+      "descricao": "Adiantamento Salarial Quinzenal",
+      "tipo": "PROVENTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Art. 462 CLT e Convenção Coletiva",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0101",
+      "descricao": "Horas Extras 50% Diurna",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "incideDSR": true,
+      "baseCalculoLegal": "Art. 59 da CLT e Art. 7º, XVI da CF/88",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0102",
+      "descricao": "Horas Extras 100% Domingos e Feriados",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "incideDSR": true,
+      "baseCalculoLegal": "Art. 9º da Lei nº 605/49 e Súmula 146 TST",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0103",
+      "descricao": "Adicional Noturno 20%",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "incideDSR": true,
+      "baseCalculoLegal": "Art. 73 da CLT e Súmula 60 TST",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0104",
+      "descricao": "D.S.R. sobre Horas Extras e Adicionais",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "baseCalculoLegal": "Art. 7º Lei 605/49 e Súmula 172 TST",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0105",
+      "descricao": "Comissões e Gratificações de Função",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "baseCalculoLegal": "Art. 457 § 1º da CLT",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0201",
+      "descricao": "Faltas Injustificadas",
+      "tipo": "DESCONTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "baseCalculoLegal": "Art. 473 CLT e Art. 6º Lei 605/49",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0202",
+      "descricao": "DSR s/ Faltas da Semana",
+      "tipo": "DESCONTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": true,
+      "baseCalculoLegal": "Art. 6º da Lei nº 605/49",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0301",
+      "descricao": "Vale Transporte (Participação Colaborador)",
+      "tipo": "DESCONTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Art. 4º Lei nº 7.418/1985 (Até 6% Salário Base)",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0302",
+      "descricao": "Vale Refeição (Coparticipação PAT)",
+      "tipo": "DESCONTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Lei nº 6.321/1976 (PAT)",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0901",
+      "descricao": "INSS s/ Folha de Pagamento",
+      "tipo": "DESCONTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Art. 28 Lei 8.212/91 e EC 103/2019",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "0902",
+      "descricao": "IRRF s/ Salário",
+      "tipo": "DESCONTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Lei 7.713/88 e Lei 14.663/2023",
+      "vigenciaInicio": "2020-01-01"
+    },
+    {
+      "codigo": "908",
+      "descricao": "Pro labore",
+      "tipo": "PROVENTO",
+      "incideINSS": true,
+      "incideIRRF": true,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Lei nº 8.212/91, Art. 12, I, f",
+      "vigenciaInicio": "2019-01-01"
+    },
+    {
+      "codigo": "310",
+      "descricao": "INSS",
+      "tipo": "DESCONTO",
+      "incideINSS": false,
+      "incideIRRF": false,
+      "incideFGTS": false,
+      "baseCalculoLegal": "Lei nº 8.212/91, Art. 21 e 28, III (11% Contribuinte Individual)",
+      "vigenciaInicio": "2019-01-01"
+    }
+  ],
+  "lancamentos": [
+    {
+      "id": "lanc-lucas-he",
+      "empregadoId": "emp-lucas",
+      "competencia": "05/2026",
+      "rubricaCodigo": "0101",
+      "descricao": "Horas Extras 50%",
+      "referencia": 8,
+      "unidadeReferencia": "HORAS",
+      "valor": 0,
+      "origem": "MOVIMENTACAO_EMPRESA",
+      "observacao": "Projeto de migração de nuvem aprovado pelo gestor"
+    },
+    {
+      "id": "lanc-lucas-comissao",
+      "empregadoId": "emp-lucas",
+      "competencia": "05/2026",
+      "rubricaCodigo": "0105",
+      "descricao": "Bônus de Entrega Técnica",
+      "referencia": 1,
+      "unidadeReferencia": "VALOR",
+      "valor": 1500,
+      "origem": "MANUAL"
+    },
+    {
+      "id": "lanc-carlos-vt",
+      "empregadoId": "emp-carlos",
+      "competencia": "05/2026",
+      "rubricaCodigo": "0101",
+      "descricao": "Horas Extras 50%",
+      "referencia": 4,
+      "unidadeReferencia": "HORAS",
+      "valor": 0,
+      "origem": "SISTEMA"
+    },
+    {
+      "empresaId": "emp-1794402661253",
+      "competencia": "06/2026",
+      "rubricaCodigo": "0101",
+      "descricao": "Horas Extras 50%",
+      "tipoRubrica": "PROVENTO",
+      "referencia": 10,
+      "unidadeReferencia": "HORAS",
+      "observacao": "Escala extra de entrega no feriado",
+      "id": "lanc-1794402661286"
+    }
+  ],
+  "folhasCalculadas": [
+    {
+      "id": "folha-emp-lucas-04/2026-mensal",
+      "empregadoId": "emp-lucas",
+      "matricula": "00101",
+      "nomeEmpregado": "Lucas Gabriel de Albuquerque",
+      "cargo": "Engenheiro de Software Sênior",
+      "departamento": "Engenharia de Tecnologia",
+      "competencia": "04/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 9200,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 9200,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 9200.00",
+              "Jornada: 40h semanais (divisor 200h)"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 480,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 9200.00",
+              "Limite legal de 6%: R$ 552.00",
+              "Custo total dos vales fornecidos: R$ 480.00",
+              "Valor aplicado (menor valor): R$ 480.00"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 480
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0302",
+          "descricao": "Vale Refeição (Coparticipação PAT)",
+          "tipo": "DESCONTO",
+          "referencia": "PAT",
+          "provento": 0,
+          "desconto": 50,
+          "memoriaCalculo": {
+            "titulo": "Desconto de Coparticipação em Alimentação/Refeição",
+            "formula": "Participação do trabalhador autorizada no PAT",
+            "passoAPasso": [
+              "Valor total do benefício fornecido: R$ 950.00",
+              "Coparticipação pactuada do empregado: R$ 50.00"
+            ],
+            "baseCalculo": 950,
+            "aliquotasOuFatores": {
+              "descontoFixo": 50
+            },
+            "fundamentoLegal": "Lei nº 6.321/1976 (PAT)"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "9.88%",
+          "provento": 0,
+          "desconto": 908.86,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 9200.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 3785.99 × 14.0% = R$ 530.04",
+              "Base ultrapassou o teto de R$ 7786.02. Aplicação da contribuição máxima fixada em R$ 908.86.",
+              "Total retido do colaborador: R$ 908.86 (Alíquota efetiva média: 9.88%)"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "9.88%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 1279.79,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 9200.00",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1288.04 (INSS: R$ 908.86 + 2 dependente(s): R$ 379.18).",
+              "Base tributável: R$ 9200.00 - R$ 1288.04 = R$ 7911.96",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 7911.96 × 27.5%) - R$ 896.00 = R$ 1279.79",
+              "Valor retido do colaborador: R$ 1279.79"
+            ],
+            "baseCalculo": 7911.96,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 9200,
+      "totalDescontos": 2718.65,
+      "valorLiquido": 6481.35,
+      "bases": {
+        "baseINSS": 9200,
+        "baseIRRF": 7911.96,
+        "baseFGTS": 9200,
+        "baseSalarioFamilia": 9200
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 736,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 736
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-mariana-04/2026-mensal",
+      "empregadoId": "emp-mariana",
+      "matricula": "00102",
+      "nomeEmpregado": "Mariana Ribeiro Costa",
+      "cargo": "Analista de Recursos Humanos Pleno",
+      "departamento": "Gente e Gestão",
+      "competencia": "04/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 4600,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 4600,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 4600.00",
+              "Jornada: 44h semanais (divisor 220h)"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "divisor": 220
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 276,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 4600.00",
+              "Limite legal de 6%: R$ 276.00",
+              "Custo total dos vales fornecidos: R$ 380.00",
+              "Valor aplicado (menor valor): R$ 276.00"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 380
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0302",
+          "descricao": "Vale Refeição (Coparticipação PAT)",
+          "tipo": "DESCONTO",
+          "referencia": "PAT",
+          "provento": 0,
+          "desconto": 40,
+          "memoriaCalculo": {
+            "titulo": "Desconto de Coparticipação em Alimentação/Refeição",
+            "formula": "Participação do trabalhador autorizada no PAT",
+            "passoAPasso": [
+              "Valor total do benefício fornecido: R$ 800.00",
+              "Coparticipação pactuada do empregado: R$ 40.00"
+            ],
+            "baseCalculo": 800,
+            "aliquotasOuFatores": {
+              "descontoFixo": 40
+            },
+            "fundamentoLegal": "Lei nº 6.321/1976 (PAT)"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "10.06%",
+          "provento": 0,
+          "desconto": 462.82,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 4600.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 599.97 × 14.0% = R$ 84.00",
+              "Total retido do colaborador: R$ 462.82 (Alíquota efetiva média: 10.06%)"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "10.06%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "22.5%",
+          "provento": 0,
+          "desconto": 225.44,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 4600.00",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 652.41 (INSS: R$ 462.82 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 4600.00 - R$ 652.41 = R$ 3947.59",
+              "Faixa IRRF: 22,5% (R$ 3.751,06 até R$ 4.664,68)",
+              "Cálculo: (R$ 3947.59 × 22.5%) - R$ 662.77 = R$ 225.44",
+              "Valor retido do colaborador: R$ 225.44"
+            ],
+            "baseCalculo": 3947.59,
+            "aliquotasOuFatores": {
+              "aliquota": "22.5%",
+              "deducao": 662.77,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 4600,
+      "totalDescontos": 1004.26,
+      "valorLiquido": 3595.74,
+      "bases": {
+        "baseINSS": 4600,
+        "baseIRRF": 3947.59,
+        "baseFGTS": 4600,
+        "baseSalarioFamilia": 4600
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 368,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 368
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-carlos-04/2026-mensal",
+      "empregadoId": "emp-carlos",
+      "matricula": "00103",
+      "nomeEmpregado": "Carlos Eduardo dos Santos",
+      "cargo": "Assistente Administrativo Júnior",
+      "departamento": "Financeiro e DP",
+      "competencia": "04/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 2600,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 2600,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 2600.00",
+              "Jornada: 44h semanais (divisor 220h)"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "divisor": 220
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 156,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 2600.00",
+              "Limite legal de 6%: R$ 156.00",
+              "Custo total dos vales fornecidos: R$ 320.00",
+              "Valor aplicado (menor valor): R$ 156.00"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 320
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "8.19%",
+          "provento": 0,
+          "desconto": 212.82,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 2600.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1188.00 × 9.0% = R$ 106.92",
+              "Total retido do colaborador: R$ 212.82 (Alíquota efetiva média: 8.19%)"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "8.19%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        }
+      ],
+      "totalProventos": 2600,
+      "totalDescontos": 368.82,
+      "valorLiquido": 2231.18,
+      "bases": {
+        "baseINSS": 2600,
+        "baseIRRF": 2035.2,
+        "baseFGTS": 2600,
+        "baseSalarioFamilia": 2600
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 208,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 208
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-beatriz-04/2026-mensal",
+      "empregadoId": "emp-beatriz",
+      "matricula": "00104",
+      "nomeEmpregado": "Beatriz Helena Lima",
+      "cargo": "Gerente de Produto e Operações",
+      "departamento": "Diretoria de Operações",
+      "competencia": "04/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 12500,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 12500,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 12500.00",
+              "Jornada: 40h semanais (divisor 200h)"
+            ],
+            "baseCalculo": 12500,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "7.27%",
+          "provento": 0,
+          "desconto": 908.86,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 12500.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 3785.99 × 14.0% = R$ 530.04",
+              "Base ultrapassou o teto de R$ 7786.02. Aplicação da contribuição máxima fixada em R$ 908.86.",
+              "Total retido do colaborador: R$ 908.86 (Alíquota efetiva média: 7.27%)"
+            ],
+            "baseCalculo": 12500,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "7.27%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 2239.43,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 12500.00",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1098.45 (INSS: R$ 908.86 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 12500.00 - R$ 1098.45 = R$ 11401.55",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 11401.55 × 27.5%) - R$ 896.00 = R$ 2239.43",
+              "Valor retido do colaborador: R$ 2239.43"
+            ],
+            "baseCalculo": 11401.55,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 12500,
+      "totalDescontos": 3148.29,
+      "valorLiquido": 9351.71,
+      "bases": {
+        "baseINSS": 12500,
+        "baseIRRF": 11401.55,
+        "baseFGTS": 12500,
+        "baseSalarioFamilia": 12500
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 1000,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 1000
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-diretor-marcos-04/2026-mensal",
+      "empregadoId": "emp-diretor-marcos",
+      "matricula": "00027",
+      "nomeEmpregado": "Marcos Vinícius da Silva Costa",
+      "cargo": "Diretor Presidente / Sócio Administrador",
+      "departamento": "Diretoria Executiva",
+      "competencia": "04/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 7786.02,
+      "itens": [
+        {
+          "rubricaCodigo": "908",
+          "descricao": "Pro labore",
+          "tipo": "PROVENTO",
+          "referencia": "30 dia(s)",
+          "provento": 7786.02,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Remuneração de Pró-Labore",
+            "formula": "Valor fixado em contrato social / ata para o diretor",
+            "passoAPasso": [
+              "Pró-Labore contratual fixado: R$ 7786.02",
+              "Remuneração de sócio/diretor sem vínculo empregatício CLT (não incide FGTS por padrão)."
+            ],
+            "baseCalculo": 7786.02,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Lei 8.212/1991, Art. 12, V, f"
+          }
+        },
+        {
+          "rubricaCodigo": "310",
+          "descricao": "INSS",
+          "tipo": "DESCONTO",
+          "referencia": "11%",
+          "provento": 0,
+          "desconto": 856.46,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária do Contribuinte Individual (Pró-Labore)",
+            "formula": "Base Pró-Labore (limitada ao teto) × 11%",
+            "passoAPasso": [
+              "Base de incidência apurada: R$ 7786.02",
+              "Limite máximo do salário de contribuição (Teto): R$ 7786.02",
+              "Alíquota legal de 11% (Art. 21 da Lei 8.212/91): R$ 7786.02 × 11% = R$ 856.46"
+            ],
+            "baseCalculo": 7786.02,
+            "aliquotasOuFatores": {
+              "aliquota": "11%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 21 e Art. 28, III da Lei nº 8.212/1991"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 957.49,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 7786.02",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1046.05 (INSS: R$ 856.46 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 7786.02 - R$ 1046.05 = R$ 6739.97",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 6739.97 × 27.5%) - R$ 896.00 = R$ 957.49",
+              "Valor retido do colaborador: R$ 957.49"
+            ],
+            "baseCalculo": 6739.97,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 7786.02,
+      "totalDescontos": 1813.95,
+      "valorLiquido": 5972.07,
+      "bases": {
+        "baseINSS": 7786.02,
+        "baseIRRF": 6739.97,
+        "baseFGTS": 0,
+        "baseSalarioFamilia": 7786.02
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 0,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 0
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-lucas-05/2026-mensal",
+      "empregadoId": "emp-lucas",
+      "matricula": "00101",
+      "nomeEmpregado": "Lucas Gabriel de Albuquerque",
+      "cargo": "Engenheiro de Software Sênior",
+      "departamento": "Engenharia de Tecnologia",
+      "competencia": "05/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 9200,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 9200,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 9200.00",
+              "Jornada: 40h semanais (divisor 200h)"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0101",
+          "descricao": "Horas Extras 50%",
+          "tipo": "PROVENTO",
+          "referencia": 8,
+          "provento": 552,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Hora Extra 50% Diurna",
+            "formula": "(Salário Base ÷ Divisor) × 1,50 × Quantidade de Horas",
+            "passoAPasso": [
+              "Salário Base: R$ 9200.00",
+              "Divisor de Horas: 200 horas",
+              "Salário-hora ordinário: R$ 46.0000",
+              "Adicional de 50%: R$ 46.0000 × 1,50 = R$ 69.0000/hora",
+              "Horas apuradas: 8 horas",
+              "Resultado: R$ 69.0000 × 8 = R$ 552.00"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "salarioHora": "46.0000",
+              "multiplicador": 1.5,
+              "horas": 8
+            },
+            "fundamentoLegal": "Art. 59 da CLT e Art. 7º, XVI da CF/88"
+          }
+        },
+        {
+          "rubricaCodigo": "0105",
+          "descricao": "Bônus de Entrega Técnica",
+          "tipo": "PROVENTO",
+          "referencia": "100%",
+          "provento": 1500,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Comissões e Prêmios de Produtividade",
+            "formula": "Valor apurado ou declarado para a competência",
+            "passoAPasso": [
+              "Valor informado pela empresa: R$ 1500.00",
+              "Origem: MANUAL",
+              "Incide integralmente para INSS, FGTS e IRRF."
+            ],
+            "baseCalculo": 1500,
+            "aliquotasOuFatores": {
+              "valor": 1500
+            },
+            "fundamentoLegal": "Art. 457, § 1º da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0104",
+          "descricao": "D.S.R. sobre Horas Extras",
+          "tipo": "PROVENTO",
+          "referencia": "5/25",
+          "provento": 110.4,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Descanso Semanal Remunerado sobre Horas Extras",
+            "formula": "(Total de Horas Extras ÷ Dias Úteis) × Domingos e Feriados",
+            "passoAPasso": [
+              "Total de Horas Extras no mês: R$ 552.00",
+              "Dias úteis do calendário da competência: 25",
+              "Domingos e feriados da competência: 5",
+              "Cálculo: (R$ 552.00 ÷ 25) × 5 = R$ 110.40"
+            ],
+            "baseCalculo": 552,
+            "aliquotasOuFatores": {
+              "diasUteis": 25,
+              "domingosEFeriados": 5
+            },
+            "fundamentoLegal": "Art. 7º da Lei nº 605/49 e Súmula nº 172 do TST"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 480,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 9200.00",
+              "Limite legal de 6%: R$ 552.00",
+              "Custo total dos vales fornecidos: R$ 480.00",
+              "Valor aplicado (menor valor): R$ 480.00"
+            ],
+            "baseCalculo": 9200,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 480
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0302",
+          "descricao": "Vale Refeição (Coparticipação PAT)",
+          "tipo": "DESCONTO",
+          "referencia": "PAT",
+          "provento": 0,
+          "desconto": 50,
+          "memoriaCalculo": {
+            "titulo": "Desconto de Coparticipação em Alimentação/Refeição",
+            "formula": "Participação do trabalhador autorizada no PAT",
+            "passoAPasso": [
+              "Valor total do benefício fornecido: R$ 950.00",
+              "Coparticipação pactuada do empregado: R$ 50.00"
+            ],
+            "baseCalculo": 950,
+            "aliquotasOuFatores": {
+              "descontoFixo": 50
+            },
+            "fundamentoLegal": "Lei nº 6.321/1976 (PAT)"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "8.00%",
+          "provento": 0,
+          "desconto": 908.86,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 11362.40",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 3785.99 × 14.0% = R$ 530.04",
+              "Base ultrapassou o teto de R$ 7786.02. Aplicação da contribuição máxima fixada em R$ 908.86.",
+              "Total retido do colaborador: R$ 908.86 (Alíquota efetiva média: 8.00%)"
+            ],
+            "baseCalculo": 11362.4,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "8%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 1874.45,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 11362.40",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1288.04 (INSS: R$ 908.86 + 2 dependente(s): R$ 379.18).",
+              "Base tributável: R$ 11362.40 - R$ 1288.04 = R$ 10074.36",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 10074.36 × 27.5%) - R$ 896.00 = R$ 1874.45",
+              "Valor retido do colaborador: R$ 1874.45"
+            ],
+            "baseCalculo": 10074.36,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 11362.4,
+      "totalDescontos": 3313.31,
+      "valorLiquido": 8049.09,
+      "bases": {
+        "baseINSS": 11362.4,
+        "baseIRRF": 10074.36,
+        "baseFGTS": 11362.4,
+        "baseSalarioFamilia": 9200
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 908.99,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 908.99
+      },
+      "statusPagamento": "EMITIDO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-mariana-05/2026-mensal",
+      "empregadoId": "emp-mariana",
+      "matricula": "00102",
+      "nomeEmpregado": "Mariana Ribeiro Costa",
+      "cargo": "Analista de Recursos Humanos Pleno",
+      "departamento": "Gente e Gestão",
+      "competencia": "05/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 4600,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 4600,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 4600.00",
+              "Jornada: 44h semanais (divisor 220h)"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "divisor": 220
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 276,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 4600.00",
+              "Limite legal de 6%: R$ 276.00",
+              "Custo total dos vales fornecidos: R$ 380.00",
+              "Valor aplicado (menor valor): R$ 276.00"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 380
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0302",
+          "descricao": "Vale Refeição (Coparticipação PAT)",
+          "tipo": "DESCONTO",
+          "referencia": "PAT",
+          "provento": 0,
+          "desconto": 40,
+          "memoriaCalculo": {
+            "titulo": "Desconto de Coparticipação em Alimentação/Refeição",
+            "formula": "Participação do trabalhador autorizada no PAT",
+            "passoAPasso": [
+              "Valor total do benefício fornecido: R$ 800.00",
+              "Coparticipação pactuada do empregado: R$ 40.00"
+            ],
+            "baseCalculo": 800,
+            "aliquotasOuFatores": {
+              "descontoFixo": 40
+            },
+            "fundamentoLegal": "Lei nº 6.321/1976 (PAT)"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "10.06%",
+          "provento": 0,
+          "desconto": 462.82,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 4600.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 599.97 × 14.0% = R$ 84.00",
+              "Total retido do colaborador: R$ 462.82 (Alíquota efetiva média: 10.06%)"
+            ],
+            "baseCalculo": 4600,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "10.06%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "22.5%",
+          "provento": 0,
+          "desconto": 225.44,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 4600.00",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 652.41 (INSS: R$ 462.82 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 4600.00 - R$ 652.41 = R$ 3947.59",
+              "Faixa IRRF: 22,5% (R$ 3.751,06 até R$ 4.664,68)",
+              "Cálculo: (R$ 3947.59 × 22.5%) - R$ 662.77 = R$ 225.44",
+              "Valor retido do colaborador: R$ 225.44"
+            ],
+            "baseCalculo": 3947.59,
+            "aliquotasOuFatores": {
+              "aliquota": "22.5%",
+              "deducao": 662.77,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 4600,
+      "totalDescontos": 1004.26,
+      "valorLiquido": 3595.74,
+      "bases": {
+        "baseINSS": 4600,
+        "baseIRRF": 3947.59,
+        "baseFGTS": 4600,
+        "baseSalarioFamilia": 4600
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 368,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 368
+      },
+      "statusPagamento": "EMITIDO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-carlos-05/2026-mensal",
+      "empregadoId": "emp-carlos",
+      "matricula": "00103",
+      "nomeEmpregado": "Carlos Eduardo dos Santos",
+      "cargo": "Assistente Administrativo Júnior",
+      "departamento": "Financeiro e DP",
+      "competencia": "05/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 2600,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 2600,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 2600.00",
+              "Jornada: 44h semanais (divisor 220h)"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "divisor": 220
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0101",
+          "descricao": "Horas Extras 50%",
+          "tipo": "PROVENTO",
+          "referencia": 4,
+          "provento": 70.91,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Hora Extra 50% Diurna",
+            "formula": "(Salário Base ÷ Divisor) × 1,50 × Quantidade de Horas",
+            "passoAPasso": [
+              "Salário Base: R$ 2600.00",
+              "Divisor de Horas: 220 horas",
+              "Salário-hora ordinário: R$ 11.8182",
+              "Adicional de 50%: R$ 11.8182 × 1,50 = R$ 17.7273/hora",
+              "Horas apuradas: 4 horas",
+              "Resultado: R$ 17.7273 × 4 = R$ 70.91"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "salarioHora": "11.8182",
+              "multiplicador": 1.5,
+              "horas": 4
+            },
+            "fundamentoLegal": "Art. 59 da CLT e Art. 7º, XVI da CF/88"
+          }
+        },
+        {
+          "rubricaCodigo": "0104",
+          "descricao": "D.S.R. sobre Horas Extras",
+          "tipo": "PROVENTO",
+          "referencia": "5/25",
+          "provento": 14.18,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Descanso Semanal Remunerado sobre Horas Extras",
+            "formula": "(Total de Horas Extras ÷ Dias Úteis) × Domingos e Feriados",
+            "passoAPasso": [
+              "Total de Horas Extras no mês: R$ 70.91",
+              "Dias úteis do calendário da competência: 25",
+              "Domingos e feriados da competência: 5",
+              "Cálculo: (R$ 70.91 ÷ 25) × 5 = R$ 14.18"
+            ],
+            "baseCalculo": 70.91,
+            "aliquotasOuFatores": {
+              "diasUteis": 25,
+              "domingosEFeriados": 5
+            },
+            "fundamentoLegal": "Art. 7º da Lei nº 605/49 e Súmula nº 172 do TST"
+          }
+        },
+        {
+          "rubricaCodigo": "0301",
+          "descricao": "Vale Transporte (Participação Colaborador)",
+          "tipo": "DESCONTO",
+          "referencia": "6%",
+          "provento": 0,
+          "desconto": 156,
+          "memoriaCalculo": {
+            "titulo": "Desconto Legal de Vale Transporte",
+            "formula": "Menor valor entre 6% do Salário Base e o Custo do Benefício",
+            "passoAPasso": [
+              "Salário Base: R$ 2600.00",
+              "Limite legal de 6%: R$ 156.00",
+              "Custo total dos vales fornecidos: R$ 320.00",
+              "Valor aplicado (menor valor): R$ 156.00"
+            ],
+            "baseCalculo": 2600,
+            "aliquotasOuFatores": {
+              "percentual": 6,
+              "custoTotal": 320
+            },
+            "fundamentoLegal": "Art. 4º, Parágrafo Único da Lei nº 7.418/1985"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "8.23%",
+          "provento": 0,
+          "desconto": 221.03,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 2685.09",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 18.41 × 12.0% = R$ 2.21",
+              "Total retido do colaborador: R$ 221.03 (Alíquota efetiva média: 8.23%)"
+            ],
+            "baseCalculo": 2685.0899999999997,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "8.23%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        }
+      ],
+      "totalProventos": 2685.09,
+      "totalDescontos": 377.03,
+      "valorLiquido": 2308.06,
+      "bases": {
+        "baseINSS": 2685.09,
+        "baseIRRF": 2120.29,
+        "baseFGTS": 2685.09,
+        "baseSalarioFamilia": 2600
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 214.81,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 214.81
+      },
+      "statusPagamento": "EMITIDO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-beatriz-05/2026-mensal",
+      "empregadoId": "emp-beatriz",
+      "matricula": "00104",
+      "nomeEmpregado": "Beatriz Helena Lima",
+      "cargo": "Gerente de Produto e Operações",
+      "departamento": "Diretoria de Operações",
+      "competencia": "05/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 12500,
+      "itens": [
+        {
+          "rubricaCodigo": "0001",
+          "descricao": "Salário Mensal Contratual",
+          "tipo": "PROVENTO",
+          "referencia": "30D",
+          "provento": 12500,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Salário Base Mensal",
+            "formula": "Valor nominal contratado para jornada de 30 dias comerciais",
+            "passoAPasso": [
+              "Salário base mensal fixo: R$ 12500.00",
+              "Jornada: 40h semanais (divisor 200h)"
+            ],
+            "baseCalculo": 12500,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Art. 457 e 458 da CLT"
+          }
+        },
+        {
+          "rubricaCodigo": "0901",
+          "descricao": "INSS s/ Folha de Pagamento",
+          "tipo": "DESCONTO",
+          "referencia": "7.27%",
+          "provento": 0,
+          "desconto": 908.86,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária Progressiva (INSS Empregado)",
+            "formula": "Soma das alíquotas marginais aplicadas a cada faixa salarial (EC 103/2019)",
+            "passoAPasso": [
+              "Base de incidência do INSS apurada: R$ 12500.00",
+              "1ª Faixa (até R$ 1.412,00): R$ 1412.00 × 7.5% = R$ 105.90",
+              "2ª Faixa (R$ 1.412,01 até R$ 2.666,68): R$ 1254.68 × 9.0% = R$ 112.92",
+              "3ª Faixa (R$ 2.666,69 até R$ 4.000,03): R$ 1333.35 × 12.0% = R$ 160.00",
+              "4ª Faixa (R$ 4.000,04 até R$ 7.786,02): R$ 3785.99 × 14.0% = R$ 530.04",
+              "Base ultrapassou o teto de R$ 7786.02. Aplicação da contribuição máxima fixada em R$ 908.86.",
+              "Total retido do colaborador: R$ 908.86 (Alíquota efetiva média: 7.27%)"
+            ],
+            "baseCalculo": 12500,
+            "aliquotasOuFatores": {
+              "aliquotaEfetiva": "7.27%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 28 da Lei 8.212/1991 e Emenda Constitucional nº 103/2019"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 2239.43,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 12500.00",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1098.45 (INSS: R$ 908.86 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 12500.00 - R$ 1098.45 = R$ 11401.55",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 11401.55 × 27.5%) - R$ 896.00 = R$ 2239.43",
+              "Valor retido do colaborador: R$ 2239.43"
+            ],
+            "baseCalculo": 11401.55,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 12500,
+      "totalDescontos": 3148.29,
+      "valorLiquido": 9351.71,
+      "bases": {
+        "baseINSS": 12500,
+        "baseIRRF": 11401.55,
+        "baseFGTS": 12500,
+        "baseSalarioFamilia": 12500
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 1000,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 1000
+      },
+      "statusPagamento": "EMITIDO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-diretor-marcos-05/2026-mensal",
+      "empregadoId": "emp-diretor-marcos",
+      "matricula": "00027",
+      "nomeEmpregado": "Marcos Vinícius da Silva Costa",
+      "cargo": "Diretor Presidente / Sócio Administrador",
+      "departamento": "Diretoria Executiva",
+      "competencia": "05/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 7786.02,
+      "itens": [
+        {
+          "rubricaCodigo": "908",
+          "descricao": "Pro labore",
+          "tipo": "PROVENTO",
+          "referencia": "30 dia(s)",
+          "provento": 7786.02,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Remuneração de Pró-Labore",
+            "formula": "Valor fixado em contrato social / ata para o diretor",
+            "passoAPasso": [
+              "Pró-Labore contratual fixado: R$ 7786.02",
+              "Remuneração de sócio/diretor sem vínculo empregatício CLT (não incide FGTS por padrão)."
+            ],
+            "baseCalculo": 7786.02,
+            "aliquotasOuFatores": {
+              "divisor": 200
+            },
+            "fundamentoLegal": "Lei 8.212/1991, Art. 12, V, f"
+          }
+        },
+        {
+          "rubricaCodigo": "310",
+          "descricao": "INSS",
+          "tipo": "DESCONTO",
+          "referencia": "11%",
+          "provento": 0,
+          "desconto": 856.46,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária do Contribuinte Individual (Pró-Labore)",
+            "formula": "Base Pró-Labore (limitada ao teto) × 11%",
+            "passoAPasso": [
+              "Base de incidência apurada: R$ 7786.02",
+              "Limite máximo do salário de contribuição (Teto): R$ 7786.02",
+              "Alíquota legal de 11% (Art. 21 da Lei 8.212/91): R$ 7786.02 × 11% = R$ 856.46"
+            ],
+            "baseCalculo": 7786.02,
+            "aliquotasOuFatores": {
+              "aliquota": "11%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 21 e Art. 28, III da Lei nº 8.212/1991"
+          }
+        },
+        {
+          "rubricaCodigo": "0902",
+          "descricao": "IRRF s/ Salário",
+          "tipo": "DESCONTO",
+          "referencia": "27.5%",
+          "provento": 0,
+          "desconto": 957.49,
+          "memoriaCalculo": {
+            "titulo": "Imposto de Renda Retido na Fonte (IRRF)",
+            "formula": "(Base Tributável × Alíquota) - Parcela a Deduzir",
+            "passoAPasso": [
+              "Rendimentos tributáveis: R$ 7786.02",
+              "Método adotado: DEDUÇÕES LEGAIS (Mais vantajoso ao colaborador).",
+              "Total de deduções legais: R$ 1046.05 (INSS: R$ 856.46 + 1 dependente(s): R$ 189.59).",
+              "Base tributável: R$ 7786.02 - R$ 1046.05 = R$ 6739.97",
+              "Faixa IRRF: 27,5% (Acima de R$ 4.664,68)",
+              "Cálculo: (R$ 6739.97 × 27.5%) - R$ 896.00 = R$ 957.49",
+              "Valor retido do colaborador: R$ 957.49"
+            ],
+            "baseCalculo": 6739.97,
+            "aliquotasOuFatores": {
+              "aliquota": "27.500000000000004%",
+              "deducao": 896,
+              "metodo": "DEDUCOES_LEGAIS"
+            },
+            "fundamentoLegal": "Lei nº 7.713/1988 e Lei nº 14.663/2023 (Desconto Simplificado)"
+          }
+        }
+      ],
+      "totalProventos": 7786.02,
+      "totalDescontos": 1813.95,
+      "valorLiquido": 5972.07,
+      "bases": {
+        "baseINSS": 7786.02,
+        "baseIRRF": 6739.97,
+        "baseFGTS": 0,
+        "baseSalarioFamilia": 7786.02
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 0,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 0
+      },
+      "statusPagamento": "EMITIDO",
+      "dataEmissao": "2026-11-11"
+    },
+    {
+      "id": "folha-emp-mauro-09/2026-mensal",
+      "empregadoId": "emp-mauro",
+      "matricula": "000002",
+      "nomeEmpregado": "MAURO HENRIQUE COSTA MATOS",
+      "cargo": "ADMINISTRADOR",
+      "departamento": "ADMINISTRAÇÃO",
+      "competencia": "09/2026",
+      "tipoFolha": "MENSAL",
+      "salarioBase": 1621,
+      "itens": [
+        {
+          "rubricaCodigo": "908",
+          "descricao": "Pro labore",
+          "tipo": "PROVENTO",
+          "referencia": "30 dia(s)",
+          "provento": 1621,
+          "desconto": 0,
+          "memoriaCalculo": {
+            "titulo": "Remuneração de Pró-Labore",
+            "formula": "Valor fixado em contrato social / ata para o diretor",
+            "passoAPasso": [
+              "Pró-Labore contratual fixado: R$ 1621.00",
+              "Remuneração de sócio/diretor sem vínculo empregatício CLT (não incide FGTS por padrão)."
+            ],
+            "baseCalculo": 1621,
+            "aliquotasOuFatores": {
+              "divisor": 220
+            },
+            "fundamentoLegal": "Lei 8.212/1991, Art. 12, V, f"
+          }
+        },
+        {
+          "rubricaCodigo": "310",
+          "descricao": "INSS",
+          "tipo": "DESCONTO",
+          "referencia": "11%",
+          "provento": 0,
+          "desconto": 178.31,
+          "memoriaCalculo": {
+            "titulo": "Contribuição Previdenciária do Contribuinte Individual (Pró-Labore)",
+            "formula": "Base Pró-Labore (limitada ao teto) × 11%",
+            "passoAPasso": [
+              "Base de incidência apurada: R$ 1621.00",
+              "Limite máximo do salário de contribuição (Teto): R$ 7786.02",
+              "Alíquota legal de 11% (Art. 21 da Lei 8.212/91): R$ 1621.00 × 11% = R$ 178.31"
+            ],
+            "baseCalculo": 1621,
+            "aliquotasOuFatores": {
+              "aliquota": "11%",
+              "teto": 7786.02
+            },
+            "fundamentoLegal": "Art. 21 e Art. 28, III da Lei nº 8.212/1991"
+          }
+        }
+      ],
+      "totalProventos": 1621,
+      "totalDescontos": 178.31,
+      "valorLiquido": 1442.69,
+      "bases": {
+        "baseINSS": 1621,
+        "baseIRRF": 1056.2,
+        "baseFGTS": 0,
+        "baseSalarioFamilia": 1621
+      },
+      "encargosEmpresa": {
+        "fgtsDevido": 0,
+        "inssPatronal": 0,
+        "ratAjustado": 0,
+        "terceiros": 0,
+        "totalEncargos": 0
+      },
+      "statusPagamento": "RECIBO_ASSINADO",
+      "dataEmissao": "2026-09-30"
+    }
+  ],
+  "competenciasStatus": {
+    "emp-emplast_09/2026": {
+      "id": "comp-emplast-092026",
+      "empresaId": "emp-emplast",
+      "competencia": "09/2026",
+      "status": "FECHADA",
+      "totalEmpregadosAtivos": 1,
+      "totalCalculados": 1,
+      "totalProventos": 1621,
+      "totalDescontos": 178.31,
+      "totalLiquido": 1442.69,
+      "totalEncargosEmpresa": 0,
+      "totalFGTS": 0,
+      "errosBloqueantes": [],
+      "alertasRevisao": [],
+      "historicoFechamento": {
+        "fechadoPor": "Departamento Fácil",
+        "dataFechamento": "2026-09-30T18:00:00Z"
+      }
+    },
+    "emp-1_04/2026": {
+      "id": "comp-1-042026",
+      "empresaId": "emp-1",
+      "competencia": "04/2026",
+      "status": "FECHADA",
+      "totalEmpregadosAtivos": 4,
+      "totalCalculados": 4,
+      "totalProventos": 28900,
+      "totalDescontos": 5210.45,
+      "totalLiquido": 23689.55,
+      "totalEncargosEmpresa": 2312,
+      "totalFGTS": 2312,
+      "errosBloqueantes": [],
+      "alertasRevisao": [],
+      "historicoFechamento": {
+        "fechadoPor": "Renata Albuquerque (DP)",
+        "dataFechamento": "2026-05-02T18:00:00Z"
+      }
+    },
+    "emp-1_05/2026": {
+      "id": "comp-1-052026",
+      "empresaId": "emp-1",
+      "competencia": "05/2026",
+      "status": "EM_CONFERENCIA",
+      "totalEmpregadosAtivos": 4,
+      "totalCalculados": 4,
+      "totalProventos": 31250,
+      "totalDescontos": 5680.12,
+      "totalLiquido": 25569.88,
+      "totalEncargosEmpresa": 2500,
+      "totalFGTS": 2500,
+      "errosBloqueantes": [],
+      "alertasRevisao": [
+        "Lucas Gabriel teve acréscimo superior a 15% em relação ao mês anterior (Horas Extras e Bônus)",
+        "Beatriz Helena em gozo de férias atravessando maio e junho"
+      ]
+    }
+  },
+  "ferias": [
+    {
+      "id": "fer-mariana",
+      "empregadoId": "emp-mariana",
+      "empresaId": "emp-1",
+      "periodoAquisitivoInicio": "2024-05-15",
+      "periodoAquisitivoFim": "2025-05-14",
+      "periodoConcessivoFim": "2026-05-14",
+      "saldoDiasDireito": 30,
+      "faltasInjustificadas": 0,
+      "diasGozados": 0,
+      "saldoDiasRestantes": 30,
+      "status": "VENCENDO",
+      "programacoes": []
+    },
+    {
+      "id": "fer-beatriz",
+      "empregadoId": "emp-beatriz",
+      "empresaId": "emp-1",
+      "periodoAquisitivoInicio": "2024-08-01",
+      "periodoAquisitivoFim": "2025-07-31",
+      "periodoConcessivoFim": "2026-07-31",
+      "saldoDiasDireito": 30,
+      "faltasInjustificadas": 0,
+      "diasGozados": 20,
+      "saldoDiasRestantes": 10,
+      "status": "GOZADA",
+      "programacoes": [
+        {
+          "id": "prog-b1",
+          "dataInicio": "2026-05-20",
+          "dataFim": "2026-06-08",
+          "diasGozo": 20,
+          "abonoPecuniario": false,
+          "diasAbono": 0,
+          "adiantamento13": false,
+          "competenciaApropriacao": [
+            "05/2026",
+            "06/2026"
+          ],
+          "diasMes1": {
+            "competencia": "05/2026",
+            "dias": 12,
+            "valorProporcional": 6666.67
+          },
+          "diasMes2": {
+            "competencia": "06/2026",
+            "dias": 8,
+            "valorProporcional": 4444.44
+          },
+          "totalBruto": 11111.11,
+          "inssFerias": 908.86,
+          "irrfFerias": 1850.2,
+          "valorLiquido": 8352.05,
+          "status": "PAGA",
+          "dataLimitePagamento": "2026-05-18",
+          "dataPagamento": "2026-05-18",
+          "reciboAssinado": true,
+          "dataAssinatura": "2026-05-19"
+        }
+      ]
+    },
+    {
+      "id": "fer-edenir",
+      "empregadoId": "emp-edenir",
+      "empresaId": "emp-3",
+      "periodoAquisitivoInicio": "2025-07-01",
+      "periodoAquisitivoFim": "2026-06-30",
+      "periodoConcessivoFim": "2027-06-30",
+      "saldoDiasDireito": 30,
+      "faltasInjustificadas": 0,
+      "diasGozados": 30,
+      "saldoDiasRestantes": 0,
+      "status": "GOZADA",
+      "programacoes": [
+        {
+          "id": "prog-edenir-1",
+          "dataInicio": "2026-07-01",
+          "dataFim": "2026-07-30",
+          "diasGozo": 30,
+          "abonoPecuniario": false,
+          "diasAbono": 0,
+          "adiantamento13": false,
+          "competenciaApropriacao": [
+            "07/2026"
+          ],
+          "diasMes1": {
+            "competencia": "07/2026",
+            "dias": 30,
+            "valorProporcional": 1787.3
+          },
+          "totalBruto": 2383.07,
+          "inssFerias": 190.15,
+          "irrfFerias": 0,
+          "valorLiquido": 2192.92,
+          "status": "PAGA",
+          "dataLimitePagamento": "2026-06-29",
+          "dataPagamento": "2026-06-29",
+          "reciboAssinado": true,
+          "dataAssinatura": "2026-06-29",
+          "dataAviso": "2026-06-01",
+          "dataRecibo": "2026-06-29",
+          "retornoTrabalho": "2026-07-31",
+          "parcelaIndex": 1,
+          "parcelaTotal": 1
+        }
+      ]
+    }
+  ],
+  "rescisoes": [],
+  "documentos": [
+    {
+      "id": "doc-contrato-carlos",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-carlos",
+      "tipo": "CONTRATO_EXPERIENCIA",
+      "titulo": "Contrato de Experiência (45+45 dias)",
+      "conteudoHtml": "Contrato individual de trabalho de experiência formalizado.",
+      "dataEmissao": "2026-03-20",
+      "status": "RECIBO_ASSINADO",
+      "dataAssinatura": "2026-03-20",
+      "assinanteNome": "Carlos Eduardo dos Santos",
+      "versao": 1
+    }
+  ],
+  "afastamentos": [
+    {
+      "id": "afast-1",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-mariana",
+      "tipo": "ATESTADO_MEDICO",
+      "dataInicio": "2026-04-10",
+      "previsaoRetorno": "2026-04-12",
+      "dataRetornoEfetivo": "2026-04-13",
+      "diasAfastamento": 3,
+      "cid": "J06.9 (Infecção aguda vias aéreas)",
+      "medicoEmitente": "Dra. Carolina Mendonça",
+      "crm": "184920-SP",
+      "impactoFolha": "Abonado pela empresa (sem desconto em folha por ser até 15 dias)",
+      "impactoFerias": "Sem alteração no período aquisitivo (ausência inferior a 30 dias)",
+      "status": "ENCERRADO"
+    }
+  ],
+  "agenda": [
+    {
+      "id": "ag-1",
+      "empresaId": "emp-1",
+      "titulo": "Vencimento 1º Período de Experiência (45 dias)",
+      "tipo": "EXPERIENCIA",
+      "dataLimite": "2026-05-03",
+      "empregadoNome": "Carlos Eduardo dos Santos",
+      "responsavel": "Marcos Vinícius (DP)",
+      "status": "PROXIMO_VENCIMENTO",
+      "descricao": "Decidir sobre a prorrogação para mais 45 dias ou término contratual."
+    },
+    {
+      "id": "ag-2",
+      "empresaId": "emp-1",
+      "titulo": "Férias em Risco de Dobra Legal (Art. 137 CLT)",
+      "tipo": "FERIAS_DOBRO",
+      "dataLimite": "2026-05-14",
+      "empregadoNome": "Mariana Ribeiro Costa",
+      "responsavel": "Renata Albuquerque (DP)",
+      "status": "ATRASADO",
+      "descricao": "Período concessivo vence em 14/05/2026. Necessário programar o gozo imediatamente."
+    },
+    {
+      "id": "ag-3",
+      "empresaId": "emp-1",
+      "titulo": "Transmissão da DCTFWeb e Fechamento Previdenciário",
+      "tipo": "DCTFWEB",
+      "dataLimite": "2026-05-15",
+      "responsavel": "Equipe Fiscal e DP",
+      "status": "PENDENTE",
+      "descricao": "Transmitir apuração de INSS patronal e retenções da competência anterior."
+    },
+    {
+      "id": "ag-4",
+      "empresaId": "emp-1",
+      "titulo": "Vencimento da Guia FGTS Digital",
+      "tipo": "FGTS_DIGITAL",
+      "dataLimite": "2026-05-20",
+      "responsavel": "Financeiro e DP",
+      "status": "PENDENTE",
+      "descricao": "Emitir e recolher guia unificada do FGTS Digital da competência."
+    }
+  ],
+  "esocial": [
+    {
+      "id": "es-1",
+      "codigoEvento": "S-1000",
+      "descricao": "Informações do Empregador / Contribuinte",
+      "statusEnvio": "PROCESSADO_COM_SUCESSO",
+      "numeroRecibo": "1.2.202604.0000000000098412891",
+      "numeroProtocolo": "PROT-ES-2026-98124",
+      "dataTransmissao": "2026-01-10T14:32:00Z",
+      "arquivoXmlSimulado": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<eSocial xmlns=\"http://www.esocial.gov.br/schema/evt/evtInfoEmpregador/v_S_01_02_00\">\n  <evtInfoEmpregador id=\"ID14589212400018920260110143200\">\n    <ideEmpregador>\n      <tpInsc>1</tpInsc>\n      <nrInsc>45892124000189</nrInsc>\n    </ideEmpregador>\n    <infoEmpregador>\n      <inclusao>\n        <idePeriodo>\n          <iniValid>2026-01</iniValid>\n        </idePeriodo>\n        <infoCadastro>\n          <nmRazao>TechVale Soluções em Tecnologia Ltda</nmRazao>\n          <classTrib>01</classTrib>\n        </infoCadastro>\n      </inclusao>\n    </infoEmpregador>\n  </evtInfoEmpregador>\n</eSocial>"
+    },
+    {
+      "id": "es-2",
+      "codigoEvento": "S-2200",
+      "descricao": "Cadastramento Inicial do Vínculo e Admissão",
+      "competencia": "03/2026",
+      "empregadoNome": "Carlos Eduardo dos Santos",
+      "statusEnvio": "PROCESSADO_COM_SUCESSO",
+      "numeroRecibo": "1.2.202603.0000000000041289012",
+      "numeroProtocolo": "PROT-ES-2026-33901",
+      "dataTransmissao": "2026-03-19T10:15:00Z",
+      "arquivoXmlSimulado": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<eSocial xmlns=\"http://www.esocial.gov.br/schema/evt/evtAdmissao/v_S_01_02_00\">\n  <evtAdmissao id=\"ID14589212400018920260319101500\">\n    <ideEmpregador><tpInsc>1</tpInsc><nrInsc>45892124000189</nrInsc></ideEmpregador>\n    <trabalhador><cpfTrab>29871145802</cpfTrab><nmTrab>Carlos Eduardo dos Santos</nmTrab></trabalhador>\n    <vinculo><matricula>00103</matricula><dtAdm>2026-03-20</dtAdm><tpRegJor>1</tpRegJor></vinculo>\n  </evtAdmissao>\n</eSocial>"
+    }
+  ],
+  "movimentacoes": [
+    {
+      "id": "mov-1",
+      "empresaId": "emp-1",
+      "competencia": "05/2026",
+      "empregadoId": "emp-lucas",
+      "tipo": "HORAS_EXTRAS",
+      "descricao": "8 horas extras realizadas para implantação de contingência de datacenter",
+      "quantidade": 8,
+      "dataEvento": "2026-05-12",
+      "enviadoPor": "Gestão de Engenharia",
+      "status": "INTEGRADO_NA_FOLHA",
+      "dataEnvio": "2026-05-14T10:00:00Z"
+    }
+  ],
+  "importacoesRegistradas": [
+    "import_folha_ponto_abril_2026.csv"
+  ],
+  "auditoriaLogs": [
+    {
+      "id": "log-1",
+      "dataHora": "2026-05-02T18:00:00Z",
+      "usuario": "Renata Albuquerque (DP)",
+      "acao": "FECHAMENTO_FOLHA",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "competencia": "04/2026",
+        "totalLiquido": 23689.55
+      }
+    }
+  ]
+}

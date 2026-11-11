@@ -19,6 +19,37 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(empresa),
     });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao salvar empresa');
+    }
+    return res.json();
+  },
+
+  async inativarEmpresa(id: string, inativa: boolean): Promise<Empresa> {
+    const res = await fetch(`/api/empresas/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: inativa ? 'inativa' : 'ativa' }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao alterar status da empresa');
+    }
+    return res.json();
+  },
+
+  async excluirEmpresa(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`/api/empresas/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      const erro = new Error(err.error || 'Erro ao excluir empresa') as any;
+      erro.vinculos = err.vinculos;
+      erro.podeInativar = err.podeInativar;
+      throw erro;
+    }
     return res.json();
   },
 
@@ -52,6 +83,34 @@ export const api = {
     const res = await fetch(`/api/empregados/${id}/aprovar-admissao`, {
       method: 'POST',
     });
+    return res.json();
+  },
+
+  async excluirEmpregado(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`/api/empregados/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      const erro = new Error(err.error || 'Erro ao excluir colaborador') as any;
+      erro.vinculos = err.vinculos;
+      erro.sugestao = err.sugestao;
+      erro.podeDesligar = err.podeDesligar;
+      throw erro;
+    }
+    return res.json();
+  },
+
+  async registrarDesligamento(id: string, dados: { dataDesligamento: string; motivo: string; observacoes?: string }) {
+    const res = await fetch(`/api/empregados/${id}/desligamento`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao registrar desligamento');
+    }
     return res.json();
   },
 
@@ -130,12 +189,63 @@ export const api = {
     return res.json();
   },
 
-  async getLancamentos(competencia?: string, empregadoId?: string): Promise<LancamentoVariavel[]> {
+  // Competências
+  async getCompetencias(empresaId: string): Promise<CompetenciaFolha[]> {
+    const res = await fetch(`/api/competencias/${empresaId}`);
+    return res.json();
+  },
+
+  async criarCompetencia(dados: { empresaId: string; competencia: string; tipoFolha?: string; parcela13?: string }) {
+    const res = await fetch('/api/competencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao criar competência');
+    }
+    return res.json();
+  },
+
+  async atualizarCompetencia(empresaId: string, competencia: string, dados: { novaCompetencia?: string; tipoFolha?: string }) {
+    const res = await fetch(`/api/competencias/${empresaId}/${encodeURIComponent(competencia)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao atualizar competência');
+    }
+    return res.json();
+  },
+
+  async excluirCompetencia(empresaId: string, competencia: string, force?: boolean): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`/api/competencias/${empresaId}/${encodeURIComponent(competencia)}?force=${Boolean(force)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      const erro = new Error(err.error || 'Erro ao excluir competência') as any;
+      erro.count = err.count;
+      erro.podeForcar = err.podeForcar;
+      throw erro;
+    }
+    return res.json();
+  },
+
+  async getLancamentos(competencia?: string, empregadoId?: string, empresaId?: string): Promise<LancamentoVariavel[]> {
     let url = '/api/lancamentos-variaveis?';
     if (competencia) url += `competencia=${encodeURIComponent(competencia)}&`;
-    if (empregadoId) url += `empregadoId=${empregadoId}`;
+    if (empregadoId) url += `empregadoId=${empregadoId}&`;
+    if (empresaId) url += `empresaId=${empresaId}&`;
     const res = await fetch(url);
     return res.json();
+  },
+
+  async getLancamentosVariaveis(empresaId: string, competencia: string): Promise<LancamentoVariavel[]> {
+    return this.getLancamentos(competencia, undefined, empresaId);
   },
 
   async salvarLancamento(lancamento: Partial<LancamentoVariavel>) {
@@ -144,6 +254,47 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(lancamento),
     });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao salvar lançamento');
+    }
+    return res.json();
+  },
+
+  async editarLancamento(id: string, lancamento: Partial<LancamentoVariavel>) {
+    const res = await fetch(`/api/lancamentos-variaveis/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lancamento),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao editar lançamento');
+    }
+    return res.json();
+  },
+
+  async excluirLancamento(id: string) {
+    const res = await fetch(`/api/lancamentos-variaveis/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao excluir lançamento');
+    }
+    return res.json();
+  },
+
+  async salvarLancamentosLote(dados: { lancamentos: Partial<LancamentoVariavel>[] }) {
+    const res = await fetch('/api/lancamentos-variaveis/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao salvar lançamentos em lote');
+    }
     return res.json();
   },
 

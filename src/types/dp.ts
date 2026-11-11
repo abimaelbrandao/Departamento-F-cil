@@ -219,6 +219,7 @@ export interface Empresa {
     diaVencimentoDCTFWeb: number; // dia 15
   };
   cctId?: string; // Convenção coletiva vinculada
+  status?: 'ativa' | 'inativa';
 }
 
 export type TipoRubrica = 'PROVENTO' | 'DESCONTO' | 'INFORMATIVA';
@@ -317,6 +318,8 @@ export interface CompetenciaFolha {
   totalFGTS: number;
   errosBloqueantes: string[];
   alertasRevisao: string[];
+  tipoFolha?: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | '13_INTEGRAL' | 'COMPLEMENTAR';
+  parcela13?: '1' | '2' | 'INTEGRAL';
   historicoFechamento?: {
     fechadoPor?: string;
     dataFechamento?: string;

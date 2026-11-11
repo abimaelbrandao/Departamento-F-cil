@@ -8,6 +8,7 @@ import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS, RUBRICAS_SISTEMA, PERIODOS_FERI
 import { processarFolhaEmpregado } from './src/services/calculosTrabalhistas';
 import { calcularFeriasComApropriacao, calcularRescisaoCompleta } from './src/services/calculosFeriasRescisao';
 import { Empresa, Empregado, Rubrica, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from './src/types/dp';
+import { validarCNPJ, validarCPF } from './src/utils/formatters';
 
 dotenv.config();
 
@@ -264,6 +265,64 @@ function salvarDB() {
   }
 }
 
+// Recalcula e sincroniza folha de pagamento e status da competência em memória/disco
+function recalcularCompetenciaInterna(empresaId: string, competencia: string, empregadoId?: string) {
+  const empresa = db.empresas.find(e => e.id === empresaId);
+  if (!empresa) return;
+
+  const compKey = `${empresaId}_${competencia}`;
+  const compStatus = db.competenciasStatus[compKey];
+  if (compStatus && compStatus.status === 'FECHADA') return;
+
+  let empregadosParaCalcular = db.empregados.filter(
+    e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+  );
+  if (empregadoId) {
+    empregadosParaCalcular = empregadosParaCalcular.filter(e => e.id === empregadoId);
+  }
+
+  const tipoFolha = compStatus?.tipoFolha || 'MENSAL';
+
+  for (const emp of empregadosParaCalcular) {
+    const lancs = db.lancamentos.filter(l => l.empregadoId === emp.id && l.competencia === competencia);
+    const folha = processarFolhaEmpregado(emp, empresa, competencia, lancs, tipoFolha);
+
+    db.folhasCalculadas = db.folhasCalculadas.filter(
+      f => !(f.empregadoId === emp.id && f.competencia === competencia && f.tipoFolha === tipoFolha)
+    );
+    db.folhasCalculadas.push(folha);
+  }
+
+  // Atualiza totais consolidados da competência
+  const todasFolhasComp = db.folhasCalculadas.filter(
+    f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
+  );
+
+  const ativosCount = db.empregados.filter(
+    e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+  ).length;
+
+  db.competenciasStatus[compKey] = {
+    id: compStatus?.id || `comp-${empresaId}-${competencia.replace('/', '')}`,
+    empresaId,
+    competencia,
+    status: compStatus?.status === 'FECHADA' ? 'FECHADA' : (compStatus?.status || 'EM_CONFERENCIA'),
+    tipoFolha,
+    parcela13: compStatus?.parcela13,
+    totalEmpregadosAtivos: ativosCount,
+    totalCalculados: todasFolhasComp.length,
+    totalProventos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+    totalDescontos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+    totalLiquido: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+    totalEncargosEmpresa: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+    totalFGTS: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+    errosBloqueantes: compStatus?.errosBloqueantes || [],
+    alertasRevisao: compStatus?.alertasRevisao || [],
+  };
+
+  salvarDB();
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
@@ -273,30 +332,143 @@ async function startServer() {
     res.json({ ok: true, version: '1.0.0', time: new Date().toISOString() });
   });
 
-  // Empresas
+  // Empresas: Listagem
   app.get('/api/empresas', (_req, res) => {
     res.json(db.empresas);
   });
 
+  // Empresas: Cadastro com validação de CNPJ e unicidade
   app.post('/api/empresas', (req, res) => {
+    const { cnpj, razaoSocial } = req.body;
+    if (!razaoSocial || !razaoSocial.trim()) {
+      return res.status(400).json({ error: 'Razão Social é obrigatória.' });
+    }
+    if (!cnpj) {
+      return res.status(400).json({ error: 'CNPJ é obrigatório.' });
+    }
+
+    const cnpjLimpo = cnpj.replace(/\D/g, '');
+    if (cnpjLimpo.length !== 14) {
+      return res.status(400).json({ error: 'CNPJ inválido. Deve conter 14 dígitos numéricos.' });
+    }
+    if (!validarCNPJ(cnpjLimpo)) {
+      return res.status(400).json({ error: 'Dígitos verificadores do CNPJ são inválidos.' });
+    }
+
+    // Verifica duplicidade de CNPJ
+    const jaExiste = db.empresas.some(e => e.cnpj.replace(/\D/g, '') === cnpjLimpo);
+    if (jaExiste) {
+      return res.status(409).json({ error: 'Já existe uma empresa cadastrada com este CNPJ.' });
+    }
+
     const novaEmpresa: Empresa = {
-      ...req.body,
       id: `emp-${Date.now()}`,
+      razaoSocial: razaoSocial.trim(),
+      nomeFantasia: req.body.nomeFantasia?.trim() || razaoSocial.trim(),
+      cnpj: cnpjLimpo,
+      inscricaoEstadual: req.body.inscricaoEstadual || 'ISENTO',
+      inscricaoMunicipal: req.body.inscricaoMunicipal || '',
+      codigoMunicipio: req.body.codigoMunicipio || '',
+      regimeTributario: req.body.regimeTributario || 'SIMPLES_NACIONAL',
+      fpas: req.body.fpas || '507',
+      aliquotaRat: Number(req.body.aliquotaRat ?? 2.0),
+      fap: Number(req.body.fap ?? 1.0),
+      aliquotaTerceiros: Number(req.body.aliquotaTerceiros ?? 0),
+      cnaePrincipal: req.body.cnaePrincipal || '6201-5/01 - Desenvolvimento de programas de computador sob encomenda',
+      endereco: req.body.endereco || {
+        logradouro: '',
+        numero: '',
+        bairro: '',
+        cidade: '',
+        uf: 'SP',
+        cep: '',
+      },
+      contatoResponsavel: req.body.contatoResponsavel || {
+        nome: '',
+        email: '',
+        telefone: '',
+      },
+      bancoConvenio: req.body.bancoConvenio || '',
+      configuracoesFolha: req.body.configuracoesFolha || {
+        diaPagamentoSalario: 5,
+        diaAdiantamento: 20,
+        percentualAdiantamento: 40,
+        diaVencimentoFGTS: 20,
+        diaVencimentoDCTFWeb: 15,
+      },
+      status: 'ativa',
     };
+
     db.empresas.push(novaEmpresa);
     salvarDB();
     res.status(201).json(novaEmpresa);
   });
 
+  // Empresas: Edição
   app.put('/api/empresas/:id', (req, res) => {
     const idx = db.empresas.findIndex(e => e.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Empresa não encontrada' });
+    if (idx === -1) return res.status(404).json({ error: 'Empresa não encontrada.' });
+
+    if (req.body.cnpj) {
+      const cnpjLimpo = req.body.cnpj.replace(/\D/g, '');
+      if (cnpjLimpo.length !== 14 || !validarCNPJ(cnpjLimpo)) {
+        return res.status(400).json({ error: 'CNPJ informado é inválido.' });
+      }
+      const duplicado = db.empresas.some(e => e.id !== req.params.id && e.cnpj.replace(/\D/g, '') === cnpjLimpo);
+      if (duplicado) {
+        return res.status(409).json({ error: 'Já existe outra empresa cadastrada com este CNPJ.' });
+      }
+      req.body.cnpj = cnpjLimpo;
+    }
+
     db.empresas[idx] = { ...db.empresas[idx], ...req.body };
     salvarDB();
     res.json(db.empresas[idx]);
   });
 
-  // Empregados
+  // Empresas: Inativar ou Reativar
+  app.patch('/api/empresas/:id/status', (req, res) => {
+    const empresa = db.empresas.find(e => e.id === req.params.id);
+    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada.' });
+
+    empresa.status = req.body.status === 'inativa' ? 'inativa' : 'ativa';
+    salvarDB();
+    res.json(empresa);
+  });
+
+  // Empresas: Exclusão com proteção de vínculos
+  app.delete('/api/empresas/:id', (req, res) => {
+    const { id } = req.params;
+    const empresa = db.empresas.find(e => e.id === id);
+    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada.' });
+
+    const empsVinculados = db.empregados.filter(e => e.empresaId === id);
+    const folhasVinculadas = db.folhasCalculadas.filter(f => db.empregados.some(e => e.id === f.empregadoId && e.empresaId === id));
+    const feriasVinculadas = db.ferias.filter(f => f.empresaId === id);
+    const rescisoesVinculadas = db.rescisoes.filter(r => r.empresaId === id);
+
+    const totalVinculos = empsVinculados.length + folhasVinculadas.length + feriasVinculadas.length + rescisoesVinculadas.length;
+
+    if (totalVinculos > 0) {
+      return res.status(400).json({
+        error: `Não é possível excluir permanentemente a empresa "${empresa.razaoSocial}". Existem registros ativos vinculados no banco de dados.`,
+        motivo: 'Para preservar a integridade fiscal e o histórico trabalhista, você pode inativar a empresa em vez de excluí-la.',
+        vinculos: {
+          colaboradores: empsVinculados.length,
+          folhasCalculadas: folhasVinculadas.length,
+          periodosFerias: feriasVinculadas.length,
+          rescisoes: rescisoesVinculadas.length,
+        },
+        podeInativar: true,
+      });
+    }
+
+    db.empresas = db.empresas.filter(e => e.id !== id);
+    salvarDB();
+    res.json({ success: true, message: `Empresa "${empresa.razaoSocial}" excluída com sucesso.` });
+  });
+
+  // Empregados: Listagem com filtro estrito por empresaId
   app.get('/api/empregados', (req, res) => {
     const { empresaId, status } = req.query;
     let list = db.empregados;
@@ -311,11 +483,36 @@ async function startServer() {
     res.json(emp);
   });
 
+  // Empregados: Cadastro
   app.post('/api/empregados', (req, res) => {
+    const { cpf, empresaId, nomeCompleto } = req.body;
+    if (!nomeCompleto || !nomeCompleto.trim()) {
+      return res.status(400).json({ error: 'Nome completo é obrigatório.' });
+    }
+    if (!empresaId) {
+      return res.status(400).json({ error: 'Empresa vinculada é obrigatória.' });
+    }
+
+    const cpfLimpo = cpf ? cpf.replace(/\D/g, '') : '';
+    if (cpfLimpo && !validarCPF(cpfLimpo)) {
+      return res.status(400).json({ error: 'CPF informado é inválido.' });
+    }
+
+    // Verifica se já existe colaborador com mesma matrícula ou CPF na mesma empresa
+    if (cpfLimpo) {
+      const duplicado = db.empregados.some(
+        e => e.empresaId === empresaId && e.cpf.replace(/\D/g, '') === cpfLimpo && e.status !== 'desligado'
+      );
+      if (duplicado) {
+        return res.status(409).json({ error: 'Já existe um colaborador ativo cadastrado com este CPF nesta empresa.' });
+      }
+    }
+
     const novoEmpregado: Empregado = {
       ...req.body,
       id: `emp-${Date.now()}`,
-      matricula: String(db.empregados.length + 101).padStart(5, '0'),
+      matricula: req.body.matricula || String(db.empregados.filter(e => e.empresaId === empresaId).length + 101).padStart(5, '0'),
+      cpf: cpfLimpo || req.body.cpf,
       historicoAlteracoes: [],
       documentosAdmissao: req.body.documentosAdmissao || [
         { id: `doc-1`, nome: 'Documento de Identidade (RG/CNH)', tipo: 'RG', obrigatorio: true, recebido: false, status: 'pendente' },
@@ -330,12 +527,89 @@ async function startServer() {
     res.status(201).json(novoEmpregado);
   });
 
+  // Empregados: Edição cadastral
   app.put('/api/empregados/:id', (req, res) => {
     const idx = db.empregados.findIndex(e => e.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Empregado não encontrado' });
+
+    if (req.body.cpf) {
+      const cpfLimpo = req.body.cpf.replace(/\D/g, '');
+      if (cpfLimpo.length === 11 && !validarCPF(cpfLimpo)) {
+        return res.status(400).json({ error: 'CPF informado é inválido.' });
+      }
+      req.body.cpf = cpfLimpo;
+    }
+
     db.empregados[idx] = { ...db.empregados[idx], ...req.body };
     salvarDB();
     res.json(db.empregados[idx]);
+  });
+
+  // Empregados: Exclusão com verificação de histórico
+  app.delete('/api/empregados/:id', (req, res) => {
+    const { id } = req.params;
+    const emp = db.empregados.find(e => e.id === id);
+    if (!emp) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+
+    const folhasFechadas = db.folhasCalculadas.filter(
+      f => f.empregadoId === id && db.competenciasStatus[`${emp.empresaId}_${f.competencia}`]?.status === 'FECHADA'
+    );
+    const feriasPagas = db.ferias.filter(
+      f => f.empregadoId === id && f.programacoes?.some(p => p.status === 'PAGA' || p.reciboAssinado)
+    );
+    const rescisoes = db.rescisoes.filter(r => r.empregadoId === id);
+
+    const totalMovimentosOficiais = folhasFechadas.length + feriasPagas.length + rescisoes.length;
+
+    if (totalMovimentosOficiais > 0) {
+      return res.status(400).json({
+        error: `Não é possível excluir o colaborador "${emp.nomeCompleto}". Ele possui movimentações trabalhistas oficiais e folhas fechadas.`,
+        sugestao: 'Para encerramento do contrato de trabalho, utilize a opção "Registrar Desligamento" e gere o TRCT.',
+        vinculos: {
+          folhasFechadas: folhasFechadas.length,
+          feriasPagas: feriasPagas.length,
+          rescisoes: rescisoes.length,
+        },
+        podeDesligar: true,
+      });
+    }
+
+    // Exclusão permitida para cadastro sem movimentações fechadas (criado por engano)
+    db.folhasCalculadas = db.folhasCalculadas.filter(f => f.empregadoId !== id);
+    db.lancamentos = db.lancamentos.filter(l => l.empregadoId !== id);
+    db.ferias = db.ferias.filter(f => f.empregadoId !== id);
+    db.documentos = db.documentos.filter(d => d.empregadoId !== id);
+    db.empregados = db.empregados.filter(e => e.id !== id);
+
+    salvarDB();
+    res.json({ success: true, message: `Colaborador "${emp.nomeCompleto}" excluído com sucesso.` });
+  });
+
+  // Empregados: Registrar Desligamento
+  app.post('/api/empregados/:id/desligamento', (req, res) => {
+    const { id } = req.params;
+    const { dataDesligamento, motivo, observacoes } = req.body;
+    const emp = db.empregados.find(e => e.id === id);
+    if (!emp) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+
+    const dataFinalDesligamento = dataDesligamento || new Date().toISOString().split('T')[0];
+    emp.status = 'desligado';
+    emp.dataDesligamento = dataFinalDesligamento;
+
+    if (!emp.historicoAlteracoes) emp.historicoAlteracoes = [];
+    emp.historicoAlteracoes.push({
+      id: `hist-deslig-${Date.now()}`,
+      dataVigencia: dataFinalDesligamento,
+      dataRegistro: new Date().toISOString().split('T')[0],
+      tipo: 'LOTACAO',
+      valorAnterior: 'Ativo',
+      valorNovo: `Desligado (${motivo || 'Rescisão contratual'})`,
+      motivo: observacoes || motivo || 'Desligamento registrado pelo operador do DP',
+      responsavel: 'Operador DP',
+    });
+
+    salvarDB();
+    res.json({ success: true, empregado: emp });
   });
 
   // Registra alteração com histórico e vigência (salário, cargo, etc.)
@@ -413,8 +687,9 @@ async function startServer() {
   });
 
   // Folha de Pagamento: Consulta de competência
-  app.get('/api/folha/:empresaId/:competencia', (req, res) => {
-    const { empresaId, competencia } = req.params;
+  app.get(['/api/folha/:empresaId/:competencia', '/api/folha/:empresaId/:mes/:ano'], (req, res) => {
+    const { empresaId } = req.params;
+    const competencia = req.params.competencia ? decodeURIComponent(req.params.competencia) : `${req.params.mes}/${req.params.ano}`;
     const folhas = db.folhasCalculadas.filter(
       f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
     );
@@ -760,12 +1035,161 @@ async function startServer() {
     });
   });
 
-  // Lançamentos Variáveis
+  // ==========================================
+  // Competências: CRUD e Gestão de Períodos
+  // ==========================================
+  app.get('/api/competencias/:empresaId', (req, res) => {
+    const { empresaId } = req.params;
+    const list: CompetenciaFolha[] = [];
+
+    for (const [key, comp] of Object.entries(db.competenciasStatus)) {
+      if (key.startsWith(`${empresaId}_`) || comp.empresaId === empresaId) {
+        list.push(comp);
+      }
+    }
+
+    // Ordenação cronológica decrescente
+    list.sort((a, b) => {
+      const pA = a.competencia.split('/');
+      const pB = b.competencia.split('/');
+      const mA = parseInt(pA[0], 10) || 1;
+      const yA = parseInt(pA[1], 10) || 2026;
+      const mB = parseInt(pB[0], 10) || 1;
+      const yB = parseInt(pB[1], 10) || 2026;
+      return (yB * 100 + mB) - (yA * 100 + mA);
+    });
+
+    res.json(list);
+  });
+
+  app.post('/api/competencias', (req, res) => {
+    const { empresaId, competencia, tipoFolha = 'MENSAL', parcela13 } = req.body;
+    if (!empresaId || !competencia) {
+      return res.status(400).json({ error: 'Empresa e competência são obrigatórias.' });
+    }
+
+    const compKey = `${empresaId}_${competencia}`;
+    let comp = db.competenciasStatus[compKey];
+    if (comp) {
+      return res.json({ existe: true, competencia: comp, message: 'Competência já existente.' });
+    }
+
+    const ativosCount = db.empregados.filter(
+      e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+    ).length;
+
+    comp = {
+      id: `comp-${empresaId}-${competencia.replace('/', '')}`,
+      empresaId,
+      competencia,
+      status: 'ABERTA',
+      tipoFolha,
+      parcela13,
+      totalEmpregadosAtivos: ativosCount,
+      totalCalculados: 0,
+      totalProventos: 0,
+      totalDescontos: 0,
+      totalLiquido: 0,
+      totalEncargosEmpresa: 0,
+      totalFGTS: 0,
+      errosBloqueantes: [],
+      alertasRevisao: [],
+    };
+
+    db.competenciasStatus[compKey] = comp;
+    salvarDB();
+    res.status(201).json({ existe: false, competencia: comp });
+  });
+
+  app.put(['/api/competencias/:empresaId/:competencia', '/api/competencias/:empresaId/:mes/:ano'], (req, res) => {
+    const { empresaId } = req.params;
+    const competencia = req.params.competencia ? decodeURIComponent(req.params.competencia) : `${req.params.mes}/${req.params.ano}`;
+    const { novaCompetencia, tipoFolha } = req.body;
+
+    const oldKey = `${empresaId}_${competencia}`;
+    const comp = db.competenciasStatus[oldKey];
+    if (!comp) return res.status(404).json({ error: 'Competência não encontrada.' });
+
+    if (comp.status === 'FECHADA') {
+      return res.status(400).json({ error: 'Competência fechada não pode ter o período alterado. Reabra primeiro.' });
+    }
+
+    if (novaCompetencia && novaCompetencia !== competencia) {
+      const newKey = `${empresaId}_${novaCompetencia}`;
+      if (db.competenciasStatus[newKey]) {
+        return res.status(409).json({ error: `A competência ${novaCompetencia} já existe nesta empresa.` });
+      }
+
+      for (const l of db.lancamentos) {
+        if (l.competencia === competencia && db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId)) {
+          l.competencia = novaCompetencia;
+        }
+      }
+
+      for (const f of db.folhasCalculadas) {
+        if (f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)) {
+          f.competencia = novaCompetencia;
+        }
+      }
+
+      comp.competencia = novaCompetencia;
+      delete db.competenciasStatus[oldKey];
+      db.competenciasStatus[newKey] = comp;
+    }
+
+    if (tipoFolha) comp.tipoFolha = tipoFolha;
+    salvarDB();
+    res.json(comp);
+  });
+
+  app.delete(['/api/competencias/:empresaId/:competencia', '/api/competencias/:empresaId/:mes/:ano'], (req, res) => {
+    const { empresaId } = req.params;
+    const competencia = req.params.competencia ? decodeURIComponent(req.params.competencia) : `${req.params.mes}/${req.params.ano}`;
+    const { force } = req.query;
+
+    const compKey = `${empresaId}_${competencia}`;
+    const comp = db.competenciasStatus[compKey];
+    if (!comp) return res.status(404).json({ error: 'Competência não encontrada.' });
+
+    if (comp.status === 'FECHADA') {
+      return res.status(400).json({ error: 'Não é possível excluir uma competência fechada. É necessário reabri-la primeiro.' });
+    }
+
+    const lancs = db.lancamentos.filter(
+      l => l.competencia === competencia && db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId)
+    );
+
+    if (lancs.length > 0 && force !== 'true') {
+      return res.status(400).json({
+        error: `A competência ${competencia} possui ${lancs.length} lançamento(s) de evento(s) vinculado(s).`,
+        count: lancs.length,
+        podeForcar: true,
+      });
+    }
+
+    db.lancamentos = db.lancamentos.filter(
+      l => !(l.competencia === competencia && db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId))
+    );
+    db.folhasCalculadas = db.folhasCalculadas.filter(
+      f => !(f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId))
+    );
+    delete db.competenciasStatus[compKey];
+
+    salvarDB();
+    res.json({ success: true, message: `Competência ${competencia} excluída com sucesso.` });
+  });
+
+  // ==========================================
+  // Lançamentos Variáveis (Eventos na Folha)
+  // ==========================================
   app.get('/api/lancamentos-variaveis', (req, res) => {
-    const { competencia, empregadoId } = req.query;
+    const { competencia, empregadoId, empresaId } = req.query;
     let list = db.lancamentos;
     if (competencia) list = list.filter(l => l.competencia === competencia);
     if (empregadoId) list = list.filter(l => l.empregadoId === empregadoId);
+    if (empresaId) {
+      list = list.filter(l => db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId));
+    }
     res.json(list);
   });
 
@@ -774,9 +1198,115 @@ async function startServer() {
       ...req.body,
       id: `lanc-${Date.now()}`,
     };
+
+    const emp = db.empregados.find(e => e.id === novo.empregadoId);
+    if (emp && (!novo.valor || novo.valor <= 0)) {
+      const salario = emp.salarioBase || 0;
+      const divisor = emp.divisorHoras || 220;
+      const vh = salario / divisor;
+      const ref = novo.referencia || 1;
+      if (novo.rubricaCodigo === '0101') novo.valor = Math.round(vh * 1.5 * ref * 100) / 100;
+      else if (novo.rubricaCodigo === '0102') novo.valor = Math.round(vh * 2.0 * ref * 100) / 100;
+      else if (novo.rubricaCodigo === '0103') novo.valor = Math.round(vh * 0.2 * ref * 100) / 100;
+      else if (novo.rubricaCodigo === '0201') novo.valor = Math.round((salario / 30) * ref * 100) / 100;
+    }
+
     db.lancamentos.push(novo);
     salvarDB();
+
+    if (emp) {
+      recalcularCompetenciaInterna(emp.empresaId, novo.competencia, emp.id);
+    }
+
     res.status(201).json(novo);
+  });
+
+  app.put('/api/lancamentos-variaveis/:id', (req, res) => {
+    const idx = db.lancamentos.findIndex(l => l.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+
+    const lanc = db.lancamentos[idx];
+    const emp = db.empregados.find(e => e.id === lanc.empregadoId);
+
+    let novoValor = req.body.valor !== undefined ? req.body.valor : lanc.valor;
+    if (emp && req.body.referencia !== undefined && (!req.body.valor || req.body.valor <= 0)) {
+      const salario = emp.salarioBase || 0;
+      const divisor = emp.divisorHoras || 220;
+      const vh = salario / divisor;
+      const ref = Number(req.body.referencia);
+      const rubrica = req.body.rubricaCodigo || lanc.rubricaCodigo;
+      if (rubrica === '0101') novoValor = Math.round(vh * 1.5 * ref * 100) / 100;
+      else if (rubrica === '0102') novoValor = Math.round(vh * 2.0 * ref * 100) / 100;
+      else if (rubrica === '0103') novoValor = Math.round(vh * 0.2 * ref * 100) / 100;
+      else if (rubrica === '0201') novoValor = Math.round((salario / 30) * ref * 100) / 100;
+    }
+
+    db.lancamentos[idx] = {
+      ...lanc,
+      ...req.body,
+      valor: novoValor,
+      id: lanc.id,
+      empregadoId: lanc.empregadoId,
+      competencia: lanc.competencia,
+    };
+    salvarDB();
+
+    if (emp) {
+      recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
+    }
+
+    res.json(db.lancamentos[idx]);
+  });
+
+  app.delete('/api/lancamentos-variaveis/:id', (req, res) => {
+    const lanc = db.lancamentos.find(l => l.id === req.params.id);
+    if (!lanc) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+
+    const emp = db.empregados.find(e => e.id === lanc.empregadoId);
+    db.lancamentos = db.lancamentos.filter(l => l.id !== req.params.id);
+    salvarDB();
+
+    if (emp) {
+      recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
+    }
+
+    res.json({ success: true, message: 'Evento excluído e folha recalculada.' });
+  });
+
+  app.post('/api/lancamentos-variaveis/lote', (req, res) => {
+    const { lancamentos } = req.body;
+    if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
+      return res.status(400).json({ error: 'Nenhum lançamento fornecido.' });
+    }
+
+    const criados: LancamentoVariavel[] = [];
+    const empIdsAfetados = new Set<string>();
+    let compAfetada = '';
+    let empresaIdAfetada = '';
+
+    for (const l of lancamentos) {
+      const novo: LancamentoVariavel = {
+        ...l,
+        id: `lanc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      };
+      db.lancamentos.push(novo);
+      criados.push(novo);
+      empIdsAfetados.add(novo.empregadoId);
+      compAfetada = novo.competencia;
+
+      const emp = db.empregados.find(e => e.id === novo.empregadoId);
+      if (emp) empresaIdAfetada = emp.empresaId;
+    }
+
+    salvarDB();
+
+    if (empresaIdAfetada && compAfetada) {
+      for (const empId of empIdsAfetados) {
+        recalcularCompetenciaInterna(empresaIdAfetada, compAfetada, empId);
+      }
+    }
+
+    res.status(201).json({ success: true, count: criados.length, lancamentos: criados });
   });
 
   // Férias: Consulta e Programação

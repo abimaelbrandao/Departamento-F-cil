@@ -170,7 +170,7 @@ export function processarFolhaEmpregado(
   empresa: Empresa,
   competencia: string,
   lancamentos: LancamentoVariavel[] = [],
-  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | 'COMPLEMENTAR' = 'MENSAL'
+  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | '13_INTEGRAL' | 'COMPLEMENTAR' = 'MENSAL'
 ): FolhaEmpregado {
   const itens: ItemCalculadoFolha[] = [];
   const divisor = empregado.divisorHoras || 220;

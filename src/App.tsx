@@ -13,6 +13,7 @@ import {
   MovimentacaoMensalEmpresa,
   UserRole,
   StatusCompetencia,
+  LancamentoVariavel,
 } from './types/dp';
 import { api } from './services/api';
 import { formatarMoeda, formatarData, formatarCPF, formatarCompetenciaExtenso } from './utils/formatters';
@@ -38,6 +39,10 @@ import { EmployeePortalView } from './components/EmployeePortalView';
 import { PDFPreviewModal } from './components/PDFPreviewModal';
 import { AdmissionDocumentsModal } from './components/AdmissionDocumentsModal';
 import { VacationDocumentsModal } from './components/VacationDocumentsModal';
+import { CompanyManagementModal } from './components/CompanyManagementModal';
+import { CompetenceModal } from './components/CompetenceModal';
+import { AddEventModal } from './components/AddEventModal';
+import { EmployeeActionModal } from './components/EmployeeActionModal';
 import {
   Building2,
   Users,
@@ -72,6 +77,14 @@ import {
   PanelLeftOpen,
   Menu,
   Check,
+  ChevronDown,
+  Settings,
+  Edit2,
+  Trash2,
+  UserCog,
+  UserMinus,
+  Eye,
+  PlusCircle,
 } from 'lucide-react';
 
 const EMPRESA_PADRAO: Empresa = {
@@ -116,12 +129,36 @@ export default function App() {
 
   // Estado global do usuário e contexto de trabalho
   const [usuarioRole, setUsuarioRole] = useState<UserRole>('dp_operator');
-  const [empresas, setEmpresas] = useState<Empresa[]>([EMPRESA_PADRAO]);
-  const [empresaAtivaId, setEmpresaAtivaId] = useState<string>('emp-1');
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [empresaAtivaId, setEmpresaAtivaId] = useState<string>('');
   const [competenciaAtiva, setCompetenciaAtiva] = useState<string>('05/2026');
   const [abaNavegacao, setAbaNavegacao] = useState<
     'DASHBOARD' | 'FOLHA' | 'EMPREGADOS' | 'FERIAS' | 'RESCISAO' | 'CONTRATOS' | 'MOVIMENTACOES' | 'ESOCIAL'
   >('DASHBOARD');
+
+  // Gestão de Empresas
+  const [modalEmpresasAberto, setModalEmpresasAberto] = useState(false);
+  const [modoEmpresasInicial, setModoEmpresasInicial] = useState<'LISTA' | 'NOVA' | 'EDITAR'>('LISTA');
+  const [empresaParaEditar, setEmpresaParaEditar] = useState<Empresa | null>(null);
+  const [menuEmpresasAberto, setMenuEmpresasAberto] = useState(false);
+  const [bannerEmpresaRecemCriada, setBannerEmpresaRecemCriada] = useState<Empresa | null>(null);
+
+  // Gestão de Competências
+  const [modalCompetenciasAberto, setModalCompetenciasAberto] = useState(false);
+  const [modoCompetenciaInicial, setModoCompetenciaInicial] = useState<'LISTA' | 'NOVA'>('LISTA');
+  const [listaCompetencias, setListaCompetencias] = useState<CompetenciaFolha[]>([]);
+  const [menuCompetenciasAberto, setMenuCompetenciasAberto] = useState(false);
+
+  // Lançamentos Variáveis e Eventos
+  const [modalAddEventAberto, setModalAddEventAberto] = useState(false);
+  const [empregadoPreSelecionadoEvento, setEmpregadoPreSelecionadoEvento] = useState<Empregado | null>(null);
+  const [lancamentosVariaveis, setLancamentosVariaveis] = useState<LancamentoVariavel[]>([]);
+  const [lancamentoParaEditar, setLancamentoParaEditar] = useState<LancamentoVariavel | null>(null);
+
+  // Ações de Colaborador (Ficha, Edição, Alteração Salarial/Função, Desligamento, Exclusão)
+  const [modalEmployeeActionAberto, setModalEmployeeActionAberto] = useState(false);
+  const [empregadoAcaoSelecionado, setEmpregadoAcaoSelecionado] = useState<Empregado | null>(null);
+  const [modoEmployeeAction, setModoEmployeeAction] = useState<'CONSULTA' | 'EDICAO' | 'ALTERACAO_SALARIAL' | 'EXCLUSAO' | 'DESLIGAMENTO'>('CONSULTA');
 
   // Estado da barra lateral recolhível (computador) e drawer (celular)
   const [sidebarRecolhida, setSidebarRecolhida] = useState<boolean>(() => {
@@ -201,21 +238,67 @@ export default function App() {
   const [trabalhadorReciboSelecionadoId, setTrabalhadorReciboSelecionadoId] = useState<string>('TODOS');
 
   // Carrega empresas iniciais
-  useEffect(() => {
-    api.getEmpresas().then(emps => {
+  const carregarEmpresas = async () => {
+    try {
+      const emps = await api.getEmpresas();
       setEmpresas(emps);
-      if (emps.length > 0 && !empresaAtivaId) {
-        setEmpresaAtivaId(emps[0].id);
+      if (emps.length > 0) {
+        if (!empresaAtivaId || !emps.some(e => e.id === empresaAtivaId)) {
+          setEmpresaAtivaId(emps[0].id);
+        }
+      } else {
+        setEmpresaAtivaId('');
       }
-    });
+    } catch (err) {
+      console.error('Erro ao carregar empresas:', err);
+    }
+  };
+
+  useEffect(() => {
+    carregarEmpresas();
   }, []);
+
+  // Carrega lista de competências para a empresa ativa
+  const carregarCompetencias = async (empId: string) => {
+    if (!empId) {
+      setListaCompetencias([]);
+      return;
+    }
+    try {
+      const comps = await api.getCompetencias(empId);
+      setListaCompetencias(comps);
+      if (comps.length > 0 && !comps.some(c => c.competencia === competenciaAtiva)) {
+        setCompetenciaAtiva(comps[0].competencia);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar competências:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (empresaAtivaId) {
+      carregarCompetencias(empresaAtivaId);
+    }
+  }, [empresaAtivaId]);
 
   // Recarrega todos os dados ao trocar de empresa ou competência
   const carregarDadosCompetencia = async () => {
-    if (!empresaAtivaId) return;
+    if (!empresaAtivaId) {
+      setEmpregados([]);
+      setFolhaData(null);
+      setPeriodosFerias([]);
+      setDocumentos([]);
+      setAfastamentos([]);
+      setAgenda([]);
+      setEsocialEventos([]);
+      setMovimentacoes([]);
+      setLancamentosVariaveis([]);
+      setCarregandoGeral(false);
+      return;
+    }
     try {
       setCarregandoGeral(true);
-      const [emps, folhaRes, feriasRes, docsRes, afastRes, agendaRes, esocialRes, movRes] = await Promise.all([
+      const [emps, folhaRes, feriasRes, docsRes, afastRes, agendaRes, esocialRes, movRes, lancRes] = await Promise.all([
         api.getEmpregados(empresaAtivaId),
         api.getFolha(empresaAtivaId, competenciaAtiva),
         api.getFerias(empresaAtivaId),
@@ -224,6 +307,7 @@ export default function App() {
         api.getAgenda(empresaAtivaId),
         api.getESocial(empresaAtivaId),
         api.getMovimentacoes(empresaAtivaId, competenciaAtiva),
+        api.getLancamentosVariaveis(empresaAtivaId, competenciaAtiva),
       ]);
 
       setEmpregados(emps);
@@ -234,6 +318,7 @@ export default function App() {
       setAgenda(agendaRes);
       setEsocialEventos(esocialRes);
       setMovimentacoes(movRes);
+      setLancamentosVariaveis(lancRes || []);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     } finally {
@@ -245,7 +330,7 @@ export default function App() {
     carregarDadosCompetencia();
   }, [empresaAtivaId, competenciaAtiva]);
 
-  const empresaAtiva = empresas.find(e => e.id === empresaAtivaId) || empresas[0] || EMPRESA_PADRAO;
+  const empresaAtiva = empresas.find(e => e.id === empresaAtivaId) || (empresas.length > 0 ? empresas[0] : null);
 
   // Ações da Folha e Competência
   const handleCalcularFolhaCompleta = async () => {
@@ -332,21 +417,23 @@ export default function App() {
       mostrarNotificacao('Nenhuma folha calculada para esta competência.', 'info');
       return;
     }
-    const url = gerarListagemFolhaPDF(empresaAtiva, competenciaAtiva, folhaData.folhas, empregados, { returnBlobUrl: true }) as string;
+    const empAtual = empresaAtiva || EMPRESA_PADRAO;
+    const url = gerarListagemFolhaPDF(empAtual, competenciaAtiva, folhaData.folhas, empregados, { returnBlobUrl: true }) as string;
     setPdfPreviewData({
       isOpen: true,
       titulo: 'Listagem de Folha de Pagamento',
-      subtitulo: `Modelo Oficial (Carta Retrato) · Competência ${competenciaAtiva} · ${empresaAtiva.razaoSocial}`,
+      subtitulo: `Modelo Oficial (Carta Retrato) · Competência ${competenciaAtiva} · ${empAtual.razaoSocial}`,
       pdfUrl: url,
-      nomeArquivoDownload: `Listagem_Folha_${competenciaAtiva.replace('/', '-')}_${empresaAtiva.nomeFantasia || 'Empresa'}.pdf`,
+      nomeArquivoDownload: `Listagem_Folha_${competenciaAtiva.replace('/', '-')}_${empAtual.nomeFantasia || 'Empresa'}.pdf`,
       onBaixarArquivo: () => {
-        gerarListagemFolhaPDF(empresaAtiva, competenciaAtiva, folhaData.folhas, empregados);
+        gerarListagemFolhaPDF(empAtual, competenciaAtiva, folhaData.folhas, empregados);
       },
     });
   };
 
   const handleAbrirReciboIndividual = (folha: FolhaEmpregado, empObj: Empregado) => {
-    const url = gerarReciboPagamentoIndividualPDF(folha, empresaAtiva, empObj, { returnBlobUrl: true }) as string;
+    const empAtual = empresaAtiva || EMPRESA_PADRAO;
+    const url = gerarReciboPagamentoIndividualPDF(folha, empAtual, empObj, { returnBlobUrl: true }) as string;
     setPdfPreviewData({
       isOpen: true,
       titulo: `Recibo de Pagamento (Folha de Pagamento)`,
@@ -354,7 +441,7 @@ export default function App() {
       pdfUrl: url,
       nomeArquivoDownload: `Recibo_Pagamento_${competenciaAtiva.replace('/', '-')}_${folha.matricula}_${folha.nomeEmpregado.replace(/\s+/g, '_')}.pdf`,
       onBaixarArquivo: () => {
-        gerarReciboPagamentoIndividualPDF(folha, empresaAtiva, empObj);
+        gerarReciboPagamentoIndividualPDF(folha, empAtual, empObj);
       },
     });
   };
@@ -365,16 +452,17 @@ export default function App() {
       return;
     }
 
+    const empAtual = empresaAtiva || EMPRESA_PADRAO;
     if (trabalhadorReciboSelecionadoId === 'TODOS') {
-      const url = gerarRecibosEmLotePDF(empresaAtiva, competenciaAtiva, folhaData.folhas, empregados, { returnBlobUrl: true }) as string;
+      const url = gerarRecibosEmLotePDF(empAtual, competenciaAtiva, folhaData.folhas, empregados, { returnBlobUrl: true }) as string;
       setPdfPreviewData({
         isOpen: true,
         titulo: 'Recibos de Pagamento em Lote',
         subtitulo: `Modelo A4 Retrato (1 página por trabalhador) · ${folhaData.folhas.length} trabalhadores · ${formatarCompetenciaExtenso(competenciaAtiva)}`,
         pdfUrl: url,
-        nomeArquivoDownload: `Recibos_Folha_Lote_${competenciaAtiva.replace('/', '-')}_${empresaAtiva.nomeFantasia || 'Empresa'}.pdf`,
+        nomeArquivoDownload: `Recibos_Folha_Lote_${competenciaAtiva.replace('/', '-')}_${empAtual.nomeFantasia || 'Empresa'}.pdf`,
         onBaixarArquivo: () => {
-          gerarRecibosEmLotePDF(empresaAtiva, competenciaAtiva, folhaData.folhas, empregados);
+          gerarRecibosEmLotePDF(empAtual, competenciaAtiva, folhaData.folhas, empregados);
         },
       });
       setModalRecibosLoteAberto(false);
@@ -431,7 +519,7 @@ export default function App() {
     return (
       <EmployeePortalView
         empregado={colaboradorLogado}
-        empresa={empresaAtiva}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
         folhas={folhaData?.folhas || []}
         periodoFerias={periodosFerias.find(f => f.empregadoId === colaboradorLogado.id)}
         documentos={documentos.filter(d => d.empregadoId === colaboradorLogado.id)}
@@ -573,65 +661,206 @@ export default function App() {
 
           {/* Contexto Ativo: Empresa + Competência + Situação da Folha */}
           <div className="flex items-center gap-2 sm:gap-3 bg-slate-800/90 px-2 py-1.5 rounded-xl border border-slate-700/80">
-            {/* Seletor de Empresa */}
-            <div className="flex items-center gap-1.5 pl-1 sm:pl-2">
-              <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-              <select
-                value={empresaAtivaId}
-                onChange={e => setEmpresaAtivaId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-100 focus:outline-none cursor-pointer max-w-[120px] sm:max-w-[200px] truncate"
-                title="Empresa Selecionada"
+            {empresas.length === 0 ? (
+              <button
+                onClick={() => {
+                  setModoEmpresasInicial('NOVA');
+                  setEmpresaParaEditar(null);
+                  setModalEmpresasAberto(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
               >
-                {empresas.map(emp => (
-                  <option key={emp.id} value={emp.id} className="bg-slate-800 text-white">
-                    {emp.nomeFantasia || emp.razaoSocial}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <Plus className="w-3.5 h-3.5" />
+                Cadastrar primeira empresa
+              </button>
+            ) : (
+              <>
+                {/* Seletor de Empresa */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setMenuEmpresasAberto(!menuEmpresasAberto);
+                      setMenuCompetenciasAberto(false);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors max-w-[140px] sm:max-w-[220px]"
+                    title="Empresa Selecionada (Clique para trocar, criar ou gerenciar)"
+                  >
+                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">
+                      {empresaAtiva?.nomeFantasia || empresaAtiva?.razaoSocial || 'Selecionar empresa'}
+                    </span>
+                    {empresaAtiva?.status === 'inativa' && (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1 rounded shrink-0">Inativa</span>
+                    )}
+                    <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+                  </button>
 
-            <div className="w-px h-5 bg-slate-700" />
+                  {menuEmpresasAberto && (
+                    <div className="absolute left-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-1.5 text-xs">
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 flex items-center justify-between">
+                        <span>Empresas ({empresas.length})</span>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/60">
+                        {empresas.map(emp => (
+                          <button
+                            key={emp.id}
+                            onClick={() => {
+                              setEmpresaAtivaId(emp.id);
+                              setMenuEmpresasAberto(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
+                              emp.id === empresaAtivaId ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-200'
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="truncate font-semibold">{emp.nomeFantasia || emp.razaoSocial}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{emp.cnpj}</div>
+                            </div>
+                            {emp.status === 'inativa' && (
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded shrink-0">Inativa</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
 
-            {/* Seletor de Competência */}
-            <div className="flex items-center gap-1.5">
-              <CalendarDays className="w-4 h-4 text-blue-400 shrink-0" />
-              <select
-                value={competenciaAtiva}
-                onChange={e => setCompetenciaAtiva(e.target.value)}
-                className="bg-transparent text-xs font-mono font-bold text-slate-100 focus:outline-none cursor-pointer"
-                title="Competência Ativa"
-              >
-                <option value="05/2026" className="bg-slate-800 text-white">05/2026</option>
-                <option value="04/2026" className="bg-slate-800 text-white">04/2026</option>
-                <option value="06/2026" className="bg-slate-800 text-white">06/2026</option>
-              </select>
-            </div>
+                      <div className="border-t border-slate-800 mt-1 pt-1 space-y-0.5">
+                        <button
+                          onClick={() => {
+                            setMenuEmpresasAberto(false);
+                            setModoEmpresasInicial('NOVA');
+                            setEmpresaParaEditar(null);
+                            setModalEmpresasAberto(true);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          + Nova empresa
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMenuEmpresasAberto(false);
+                            setModoEmpresasInicial('LISTA');
+                            setModalEmpresasAberto(true);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-slate-400" />
+                          Gerenciar empresas
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-            <div className="w-px h-5 bg-slate-700 hidden sm:block" />
+                <div className="w-px h-5 bg-slate-700" />
 
-            {/* Badge de Situação da Folha (Ícone + Texto) */}
-            <div className="hidden sm:flex items-center pr-1">
-              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
-                statusComp === 'FECHADA'
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                  : statusComp === 'APROVADA'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : statusComp === 'EM_CONFERENCIA'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-              }`}>
-                {statusComp === 'FECHADA' ? (
-                  <Lock className="w-3.5 h-3.5" />
-                ) : statusComp === 'APROVADA' ? (
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                ) : statusComp === 'EM_CONFERENCIA' ? (
-                  <Clock className="w-3.5 h-3.5" />
-                ) : (
-                  <Unlock className="w-3.5 h-3.5" />
-                )}
-                {statusComp.replace('_', ' ')}
-              </span>
-            </div>
+                {/* Seletor de Competência */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setMenuCompetenciasAberto(!menuCompetenciasAberto);
+                      setMenuEmpresasAberto(false);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors"
+                    title="Competência Ativa (Clique para trocar, criar ou gerenciar)"
+                  >
+                    <CalendarDays className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>{competenciaAtiva || 'Sem competência'}</span>
+                    <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+                  </button>
+
+                  {menuCompetenciasAberto && (
+                    <div className="absolute left-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-1.5 text-xs">
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                        Competências
+                      </div>
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/60">
+                        {listaCompetencias.length === 0 ? (
+                          <div className="px-3 py-2 text-slate-400 text-[11px]">Nenhuma competência cadastrada.</div>
+                        ) : (
+                          listaCompetencias.map(comp => (
+                            <button
+                              key={comp.competencia}
+                              onClick={() => {
+                                setCompetenciaAtiva(comp.competencia);
+                                setMenuCompetenciasAberto(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
+                                comp.competencia === competenciaAtiva ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-200'
+                              }`}
+                            >
+                              <div className="font-mono">{comp.competencia}</div>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                                comp.status === 'FECHADA'
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : comp.status === 'APROVADA'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : comp.status === 'EM_CONFERENCIA'
+                                  ? 'bg-amber-500/20 text-amber-300'
+                                  : 'bg-blue-500/20 text-blue-300'
+                              }`}>
+                                {comp.status.replace('_', ' ')}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-800 mt-1 pt-1 space-y-0.5">
+                        <button
+                          onClick={() => {
+                            setMenuCompetenciasAberto(false);
+                            setModoCompetenciaInicial('NOVA');
+                            setModalCompetenciasAberto(true);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          + Nova competência
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMenuCompetenciasAberto(false);
+                            setModoCompetenciaInicial('LISTA');
+                            setModalCompetenciasAberto(true);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-slate-400" />
+                          Gerenciar competências
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-px h-5 bg-slate-700 hidden sm:block" />
+
+                {/* Badge de Situação da Folha (Ícone + Texto) */}
+                <div className="hidden sm:flex items-center pr-1">
+                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
+                    statusComp === 'FECHADA'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      : statusComp === 'APROVADA'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : statusComp === 'EM_CONFERENCIA'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                  }`}>
+                    {statusComp === 'FECHADA' ? (
+                      <Lock className="w-3.5 h-3.5" />
+                    ) : statusComp === 'APROVADA' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    ) : statusComp === 'EM_CONFERENCIA' ? (
+                      <Clock className="w-3.5 h-3.5" />
+                    ) : (
+                      <Unlock className="w-3.5 h-3.5" />
+                    )}
+                    {statusComp.replace('_', ' ')}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Área de Ferramentas: Consultor IA, Controle de Aparência e Perfil */}
@@ -824,11 +1053,109 @@ export default function App() {
             </div>
           )}
 
-          {/* ========================================================= */}
-          {/* ABA: DASHBOARD GERAL & AGENDA DE OBRIGAÇÕES */}
-          {/* ========================================================= */}
-          {abaNavegacao === 'DASHBOARD' && (
-            <div className="space-y-6">
+          {/* Alerta de Empresa Recém-Criada com Ações de Próximos Passos */}
+          {bannerEmpresaRecemCriada && bannerEmpresaRecemCriada.id === empresaAtivaId && (
+            <div className="p-4 bg-linear-to-r from-blue-500/10 via-indigo-500/10 to-blue-500/10 border border-blue-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600 text-white rounded-xl">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Empresa {bannerEmpresaRecemCriada.nomeFantasia || bannerEmpresaRecemCriada.razaoSocial} cadastrada!
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Próximos passos recomendados para iniciar a operação:
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setModalNovaAdmissaoAberto(true)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Cadastrar colaborador
+                </button>
+                <button
+                  onClick={() => {
+                    setModoCompetenciaInicial('NOVA');
+                    setModalCompetenciasAberto(true);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Criar competência
+                </button>
+                <button
+                  onClick={() => setBannerEmpresaRecemCriada(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  title="Dispensar aviso"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Zero-State quando não há nenhuma empresa cadastrada */}
+          {empresas.length === 0 ? (
+            <div className="max-w-2xl mx-auto py-12 px-4 text-center">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-12 shadow-xs">
+                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Building2 className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">
+                  Bem-vindo ao Departamento Fácil
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-lg mx-auto mb-8">
+                  Nenhuma empresa cadastrada no sistema. Comece cadastrando sua primeira empresa empregadora para gerenciar colaboradores, emitir contratos, lançar eventos e calcular a folha de pagamento.
+                </p>
+
+                {/* 4 Etapas do Fluxo Operacional */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-left mb-8">
+                  <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block mb-1">Etapa 1</span>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Cadastrar Empresa</div>
+                    <span className="text-[11px] text-slate-500">Razão Social e CNPJ</span>
+                  </div>
+                  <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 opacity-70">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Etapa 2</span>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Admitir Colaborador</div>
+                    <span className="text-[11px] text-slate-500">Contrato e cargo</span>
+                  </div>
+                  <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 opacity-70">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Etapa 3</span>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Criar Competência</div>
+                    <span className="text-[11px] text-slate-500">Mês normal ou 13º</span>
+                  </div>
+                  <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 opacity-70">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Etapa 4</span>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Lançar & Processar</div>
+                    <span className="text-[11px] text-slate-500">Horas extras e recibos</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setModoEmpresasInicial('NOVA');
+                    setEmpresaParaEditar(null);
+                    setModalEmpresasAberto(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Cadastrar primeira empresa
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ========================================================= */}
+              {/* ABA: DASHBOARD GERAL & AGENDA DE OBRIGAÇÕES */}
+              {/* ========================================================= */}
+              {abaNavegacao === 'DASHBOARD' && (
+                <div className="space-y-6">
               {/* Seção 1: Indicadores Financeiros da Competência com Destaque no Líquido a Pagar */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1244,8 +1571,21 @@ export default function App() {
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={handleAbrirListagemFolha}
+                    onClick={() => {
+                      setEmpregadoPreSelecionadoEvento(null);
+                      setLancamentoParaEditar(null);
+                      setModalAddEventAberto(true);
+                    }}
                     className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                    title="Adicionar evento à folha (Horas extras, faltas, adicionais) individual ou em lote"
+                  >
+                    <Plus className="w-4 h-4" />
+                    + Adicionar evento
+                  </button>
+
+                  <button
+                    onClick={handleAbrirListagemFolha}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
                     title="Gerar Listagem de Folha de Pagamento em papel Carta Retrato (Modelo Oficial)"
                   >
                     <FileSpreadsheet className="w-4 h-4" />
@@ -1340,6 +1680,19 @@ export default function App() {
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
                                   onClick={() => {
+                                    setEmpregadoPreSelecionadoEvento(empObj || null);
+                                    setLancamentoParaEditar(null);
+                                    setModalAddEventAberto(true);
+                                  }}
+                                  className="px-2 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                                  title="Lançar evento (HE, Falta, Adicional) para este colaborador"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  Evento
+                                </button>
+
+                                <button
+                                  onClick={() => {
                                     const itemPrincipal = folha.itens.find(i => i.rubricaCodigo === '0101') || folha.itens.find(i => i.rubricaCodigo === '0901') || folha.itens[0];
                                     setModalMemoriaItem({
                                       item: itemPrincipal,
@@ -1347,7 +1700,7 @@ export default function App() {
                                       nome: folha.nomeEmpregado,
                                     });
                                   }}
-                                  className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                                  className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
                                   title="Ver Memória de Cálculo Aritmética e Jurídica"
                                 >
                                   <Calculator className="w-3 h-3" />
@@ -1357,7 +1710,7 @@ export default function App() {
                                 {empObj && (
                                   <button
                                     onClick={() => handleAbrirReciboIndividual(folha, empObj)}
-                                    className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                                    className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
                                     title="Visualizar e Baixar Recibo de Pagamento A4 Retrato"
                                   >
                                     <Receipt className="w-3 h-3" />
@@ -1372,6 +1725,117 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Lançamentos e Eventos Variáveis da Folha com Edição e Exclusão Imediatas */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      Lançamentos e Variáveis da Competência ({lancamentosVariaveis.length})
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Horas extras, faltas, adicionais e comissões informados. Ajustes recalculam a folha e recibos imediatamente.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEmpregadoPreSelecionadoEvento(null);
+                      setLancamentoParaEditar(null);
+                      setModalAddEventAberto(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-xl transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Adicionar evento
+                  </button>
+                </div>
+
+                {lancamentosVariaveis.length === 0 ? (
+                  <div className="p-4 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500">
+                    Nenhum evento variável registrado nesta competência. Use o botão "+ Adicionar evento" para lançar horas extras, faltas ou adicionais.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                        <tr>
+                          <th className="py-2.5 px-3">Colaborador</th>
+                          <th className="py-2.5 px-3">Rubrica</th>
+                          <th className="py-2.5 px-3 text-center">Referência</th>
+                          <th className="py-2.5 px-3 text-right">Valor Calculado</th>
+                          <th className="py-2.5 px-3">Observação</th>
+                          <th className="py-2.5 px-3 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {lancamentosVariaveis.map(lanc => {
+                          const emp = empregados.find(e => e.id === lanc.empregadoId);
+                          return (
+                            <tr key={lanc.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                              <td className="py-2.5 px-3">
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {emp?.nomeCompleto || 'Colaborador'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 block font-mono">
+                                  Mat: {emp?.matricula || '-'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold mr-1.5">
+                                  {lanc.rubricaCodigo}
+                                </span>
+                                <span className="text-slate-800 dark:text-slate-200 font-medium">
+                                  {lanc.descricao}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono font-medium text-slate-700 dark:text-slate-300">
+                                {lanc.referencia} {lanc.unidadeReferencia?.toLowerCase() || 'h'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                                {formatarMoeda(lanc.valor)}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-500 text-[11px] max-w-[200px] truncate">
+                                {lanc.observacao || '—'}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => {
+                                      setEmpregadoPreSelecionadoEvento(emp || null);
+                                      setLancamentoParaEditar(lanc);
+                                      setModalAddEventAberto(true);
+                                    }}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition-colors"
+                                    title="Editar lançamento de evento"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await api.excluirLancamento(lanc.id);
+                                        await carregarDadosCompetencia();
+                                        mostrarNotificacao('Lançamento excluído com sucesso! Folha recalculada imediatamente.', 'sucesso');
+                                      } catch (err: any) {
+                                        mostrarNotificacao(err.message || 'Erro ao excluir lançamento', 'erro');
+                                      }
+                                    }}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                                    title="Excluir lançamento de evento"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Rubricas Processadas com Acesso Direto às Memórias de Cálculo */}
@@ -1440,97 +1904,150 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Lista dos Empregados */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {empregadosFiltrados.map(emp => (
-                  <div
-                    key={emp.id}
-                    className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+              {/* Lista dos Empregados ou Estado Vazio */}
+              {empregadosFiltrados.length === 0 ? (
+                <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                  <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Nenhum colaborador encontrado</h3>
+                  <p className="text-xs text-slate-500 mt-1 mb-4 max-w-md mx-auto">
+                    Cadastre o primeiro colaborador desta empresa para emitir contratos de experiência, ficha de registro e calcular a folha.
+                  </p>
+                  <button
+                    onClick={() => setModalNovaAdmissaoAberto(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
                   >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">Mat: {emp.matricula}</span>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
-                          emp.status === 'ativo'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                            : emp.status === 'ferias'
-                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
-                            : emp.status === 'em_admissao'
-                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
-                            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
-                        }`}>
-                          {emp.status.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </div>
-
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{emp.nomeCompleto}</h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">{emp.cargo} · {emp.departamento}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">CPF: {formatarCPF(emp.cpf)} · CBO {emp.cbo}</p>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-medium">Salário Base</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums">{formatarMoeda(emp.salarioBase)}</span>
+                    <Plus className="w-4 h-4" />
+                    Cadastrar colaborador
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {empregadosFiltrados.map(emp => (
+                    <div
+                      key={emp.id}
+                      className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">Mat: {emp.matricula}</span>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                            emp.status === 'ativo'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                              : emp.status === 'ferias'
+                              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                              : emp.status === 'em_admissao'
+                              ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
+                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
+                          }`}>
+                            {emp.status.replace('_', ' ').toUpperCase()}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{emp.nomeCompleto}</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">{emp.cargo} · {emp.departamento}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">CPF: {formatarCPF(emp.cpf)} · CBO {emp.cbo}</p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-medium">Salário Base</span>
+                            <span className="font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums">{formatarMoeda(emp.salarioBase)}</span>
+                          </div>
+
+                          {/* Ações Rápidas de Gestão Cadastral */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEmpregadoAcaoSelecionado(emp);
+                                setModoEmployeeAction('CONSULTA');
+                                setModalEmployeeActionAberto(true);
+                              }}
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 text-slate-700 dark:text-slate-300 hover:text-blue-600 rounded-lg text-xs transition-colors"
+                              title="Consultar Ficha Cadastral Completa"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEmpregadoAcaoSelecionado(emp);
+                                setModoEmployeeAction('EDICAO');
+                                setModalEmployeeActionAberto(true);
+                              }}
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 text-slate-700 dark:text-slate-300 hover:text-indigo-600 rounded-lg text-xs transition-colors"
+                              title="Editar Dados Cadastrais"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEmpregadoAcaoSelecionado(emp);
+                                setModoEmployeeAction('ALTERACAO_SALARIAL');
+                                setModalEmployeeActionAberto(true);
+                              }}
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 text-slate-700 dark:text-slate-300 hover:text-emerald-600 rounded-lg text-xs transition-colors"
+                              title="Registrar Alteração Salarial / Função / Horário"
+                            >
+                              <UserCog className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEmpregadoAcaoSelecionado(emp);
+                                setModoEmployeeAction('DESLIGAMENTO');
+                                setModalEmployeeActionAberto(true);
+                              }}
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 text-slate-700 dark:text-slate-300 hover:text-amber-600 rounded-lg text-xs transition-colors"
+                              title="Registrar Desligamento / Rescisão"
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEmpregadoAcaoSelecionado(emp);
+                                setModoEmployeeAction('EXCLUSAO');
+                                setModalEmployeeActionAberto(true);
+                              }}
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-700 dark:text-slate-300 hover:text-rose-600 rounded-lg text-xs transition-colors"
+                              title="Excluir Colaborador (apenas sem movimentos)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ações Oficiais em PDF: Admissão e Férias */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => setModalAdmissaoEmpregado(emp)}
+                            className="w-full flex items-center justify-center gap-1 px-2 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                            title="Emitir Contrato de Experiência e Registro de Empregado"
+                          >
+                            <FileCheck2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                            <span className="truncate">Admissão</span>
+                          </button>
                           <button
                             onClick={() => {
                               const pf = periodosFerias.find(p => p.empregadoId === emp.id);
                               setModalDocumentosFeriasEmpregado({ empregado: emp, periodo: pf });
                             }}
-                            className="p-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-800 dark:text-indigo-300 rounded-lg text-xs transition-colors"
-                            title="Emitir Demonstrativo e Recibo de Férias"
+                            className="w-full flex items-center justify-center gap-1 px-2 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                            title="Emitir Demonstrativo e Recibo de Férias em Carta"
                           >
-                            <FileText className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={() => setModalFeriasEmpregado(emp)}
-                            className="p-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 rounded-lg text-xs transition-colors"
-                            title="Programar Férias"
-                          >
-                            <Palmtree className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={() => setModalRescisaoEmpregado(emp)}
-                            className="p-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-800 dark:text-rose-300 rounded-lg text-xs transition-colors"
-                            title="Simular Rescisão de Contrato"
-                          >
-                            <UserX className="w-3.5 h-3.5" />
+                            <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform shrink-0" />
+                            <span className="truncate">Doc. Férias</span>
                           </button>
                         </div>
                       </div>
-
-                      {/* Ações Oficiais em PDF: Admissão e Férias */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => setModalAdmissaoEmpregado(emp)}
-                          className="w-full flex items-center justify-center gap-1 px-2 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 rounded-xl text-xs font-bold transition-all shadow-2xs group"
-                          title="Emitir Contrato de Experiência e Registro de Empregado"
-                        >
-                          <FileCheck2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-                          <span className="truncate">Admissão</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            const pf = periodosFerias.find(p => p.empregadoId === emp.id);
-                            setModalDocumentosFeriasEmpregado({ empregado: emp, periodo: pf });
-                          }}
-                          className="w-full flex items-center justify-center gap-1 px-2 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl text-xs font-bold transition-all shadow-2xs group"
-                          title="Emitir Demonstrativo e Recibo de Férias em Carta"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform shrink-0" />
-                          <span className="truncate">Doc. Férias</span>
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -2019,7 +2536,9 @@ export default function App() {
               </div>
             </div>
           )}
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* 3. NAVEGAÇÃO INFERIOR PARA CELULAR (md:hidden): Início, Folha, Pessoas e Mais */}
@@ -2200,7 +2719,7 @@ export default function App() {
         isOpen={Boolean(modalRescisaoEmpregado)}
         onClose={() => setModalRescisaoEmpregado(null)}
         empregado={modalRescisaoEmpregado}
-        empresa={empresaAtiva}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
         onRescisaoConfirmada={() => {
           carregarDadosCompetencia();
           mostrarNotificacao('Rescisão confirmada e homologada com sucesso no sistema!', 'sucesso');
@@ -2212,7 +2731,7 @@ export default function App() {
         isOpen={Boolean(modalFeriasEmpregado)}
         onClose={() => setModalFeriasEmpregado(null)}
         empregado={modalFeriasEmpregado}
-        empresa={empresaAtiva}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
         periodoFerias={periodosFerias.find(f => f.empregadoId === modalFeriasEmpregado?.id)}
         onFeriasSalvas={() => {
           carregarDadosCompetencia();
@@ -2228,7 +2747,7 @@ export default function App() {
         <VacationDocumentsModal
           isOpen={Boolean(modalDocumentosFeriasEmpregado)}
           onClose={() => setModalDocumentosFeriasEmpregado(null)}
-          empresa={empresaAtiva}
+          empresa={empresaAtiva || EMPRESA_PADRAO}
           empregado={modalDocumentosFeriasEmpregado.empregado}
           periodoFerias={modalDocumentosFeriasEmpregado.periodo}
         />
@@ -2238,7 +2757,7 @@ export default function App() {
       <NewEmployeeModal
         isOpen={modalNovaAdmissaoAberto}
         onClose={() => setModalNovaAdmissaoAberto(false)}
-        empresa={empresaAtiva}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
         onEmpregadoCriado={novo => {
           carregarDadosCompetencia();
           mostrarNotificacao(`Empregado ${novo.nomeCompleto} admitido com sucesso!`, 'sucesso');
@@ -2268,7 +2787,7 @@ export default function App() {
         <AdmissionDocumentsModal
           isOpen={Boolean(modalAdmissaoEmpregado)}
           onClose={() => setModalAdmissaoEmpregado(null)}
-          empresa={empresaAtiva}
+          empresa={empresaAtiva || EMPRESA_PADRAO}
           empregado={modalAdmissaoEmpregado}
           onAtualizarEmpregado={empAtualizado => {
             setEmpregados(prev => prev.map(e => (e.id === empAtualizado.id ? empAtualizado : e)));
@@ -2421,6 +2940,103 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 12. Modal de Gestão e Cadastro de Empresas */}
+      <CompanyManagementModal
+        isOpen={modalEmpresasAberto}
+        onClose={() => setModalEmpresasAberto(false)}
+        empresas={empresas}
+        empresaAtivaId={empresaAtivaId}
+        abrirCadastroDireto={modoEmpresasInicial === 'NOVA'}
+        onSelecionarEmpresa={(id) => {
+          setEmpresaAtivaId(id);
+          setModalEmpresasAberto(false);
+        }}
+        onEmpresasAtualizadas={async () => {
+          await carregarEmpresas();
+          await carregarDadosCompetencia();
+        }}
+        onSolicitarCriarColaborador={(emp) => {
+          setEmpresaAtivaId(emp.id);
+          setBannerEmpresaRecemCriada(emp);
+          setModalNovaAdmissaoAberto(true);
+        }}
+        onSolicitarCriarCompetencia={(emp) => {
+          setEmpresaAtivaId(emp.id);
+          setBannerEmpresaRecemCriada(emp);
+          setModoCompetenciaInicial('NOVA');
+          setModalCompetenciasAberto(true);
+        }}
+      />
+
+      {/* 13. Modal de Gestão e Criação de Competências */}
+      <CompetenceModal
+        isOpen={modalCompetenciasAberto}
+        onClose={() => setModalCompetenciasAberto(false)}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
+        competenciaAtual={competenciaAtiva}
+        abrirCadastroDireto={modoCompetenciaInicial === 'NOVA'}
+        onSelecionarCompetencia={(comp) => {
+          setCompetenciaAtiva(comp);
+          setModalCompetenciasAberto(false);
+        }}
+        onCompetenciasAtualizadas={async () => {
+          if (empresaAtivaId) {
+            await carregarCompetencias(empresaAtivaId);
+            await carregarDadosCompetencia();
+          }
+        }}
+      />
+
+      {/* 14. Modal de Adicionar / Editar Eventos (Horas extras, faltas, adicionais) */}
+      <AddEventModal
+        isOpen={modalAddEventAberto}
+        onClose={() => {
+          setModalAddEventAberto(false);
+          setLancamentoParaEditar(null);
+          setEmpregadoPreSelecionadoEvento(null);
+        }}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
+        competenciaAtual={competenciaAtiva}
+        empregados={empregados}
+        colaboradorPreSelecionado={empregadoPreSelecionadoEvento}
+        lancamentoEmEdicao={lancamentoParaEditar}
+        onEventoSalvo={async () => {
+          setModalAddEventAberto(false);
+          setLancamentoParaEditar(null);
+          setEmpregadoPreSelecionadoEvento(null);
+          await carregarDadosCompetencia();
+          mostrarNotificacao('Evento salvo com sucesso! Folha recalculada imediatamente.', 'sucesso');
+        }}
+        onCriarCompetenciaSolicitada={(novaComp) => {
+          setModalAddEventAberto(false);
+          setCompetenciaAtiva(novaComp);
+          setModoCompetenciaInicial('NOVA');
+          setModalCompetenciasAberto(true);
+        }}
+      />
+
+      {/* 15. Modal de Ações do Colaborador (Ficha Cadastral, Edição, Alteração Salarial/Função, Desligamento, Exclusão) */}
+      <EmployeeActionModal
+        isOpen={modalEmployeeActionAberto}
+        onClose={() => {
+          setModalEmployeeActionAberto(false);
+          setEmpregadoAcaoSelecionado(null);
+        }}
+        empregado={empregadoAcaoSelecionado}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
+        modoInicial={modoEmployeeAction}
+        onEmpregadoAtualizado={async () => {
+          setModalEmployeeActionAberto(false);
+          setEmpregadoAcaoSelecionado(null);
+          await carregarDadosCompetencia();
+          mostrarNotificacao('Colaborador atualizado com sucesso!', 'sucesso');
+        }}
+        onAbrirRescisao={(emp) => {
+          setModalEmployeeActionAberto(false);
+          setModalRescisaoEmpregado(emp);
+        }}
+      />
     </div>
   );
 }
