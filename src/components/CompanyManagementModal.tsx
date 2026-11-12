@@ -50,6 +50,8 @@ export const CompanyManagementModal: React.FC<Props> = ({
   const [salvando, setSalvando] = useState(false);
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
   const [empresaCriadaSucesso, setEmpresaCriadaSucesso] = useState<Empresa | null>(null);
+  const [consultandoCNPJ, setConsultandoCNPJ] = useState(false);
+  const [avisoCNPJ, setAvisoCNPJ] = useState<string | null>(null);
 
   // Modal de confirmação de exclusão
   const [empresaParaExcluir, setEmpresaParaExcluir] = useState<Empresa | null>(null);
@@ -115,6 +117,7 @@ export const CompanyManagementModal: React.FC<Props> = ({
     setDiaVencimentoFGTS(20);
     setDiaVencimentoDCTFWeb(15);
     setMensagemErro(null);
+    setAvisoCNPJ(null);
     setEmpresaCriadaSucesso(null);
     setModo('FORM');
   };
@@ -144,13 +147,54 @@ export const CompanyManagementModal: React.FC<Props> = ({
     setDiaVencimentoFGTS(emp.configuracoesFolha?.diaVencimentoFGTS ?? 20);
     setDiaVencimentoDCTFWeb(emp.configuracoesFolha?.diaVencimentoDCTFWeb ?? 15);
     setMensagemErro(null);
+    setAvisoCNPJ(null);
     setEmpresaCriadaSucesso(null);
     setModo('FORM');
+  };
+
+  const handleConsultarCNPJ = async (cnpjParaConsultar?: string) => {
+    const valor = (cnpjParaConsultar || cnpj).replace(/\D/g, '');
+    if (valor.length !== 14) {
+      setMensagemErro('Informe os 14 dígitos do CNPJ para efetuar a consulta.');
+      return;
+    }
+    if (!validarCNPJ(valor)) {
+      setMensagemErro('Os dígitos verificadores do CNPJ informado são inválidos.');
+      return;
+    }
+
+    setConsultandoCNPJ(true);
+    setMensagemErro(null);
+    setAvisoCNPJ(null);
+
+    try {
+      const dados = await api.consultarCNPJ(valor);
+      if (dados.razaoSocial) setRazaoSocial(dados.razaoSocial);
+      if (dados.nomeFantasia) setNomeFantasia(dados.nomeFantasia);
+      if (dados.cnaePrincipal) setCnaePrincipal(dados.cnaePrincipal);
+      if (dados.logradouro) setLogradouro(dados.logradouro);
+      if (dados.numero) setNumero(dados.numero);
+      if (dados.bairro) setBairro(dados.bairro);
+      if (dados.cidade) setCidade(dados.cidade);
+      if (dados.uf) setUf(dados.uf);
+      if (dados.cep) setCep(dados.cep);
+      if (dados.regimeTributario) setRegimeTributario(dados.regimeTributario);
+
+      setAvisoCNPJ('Dados cadastrais da empresa localizados e preenchidos automaticamente.');
+    } catch (err: any) {
+      // Falha não-bloqueante na consulta: informa o operador e mantém os dados já digitados para preenchimento manual
+      setAvisoCNPJ(
+        'Consulta automática de CNPJ indisponível no momento. Você pode prosseguir preenchendo os campos manualmente.'
+      );
+    } finally {
+      setConsultandoCNPJ(false);
+    }
   };
 
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensagemErro(null);
+    setAvisoCNPJ(null);
 
     const cnpjLimpo = cnpj.replace(/\D/g, '');
     if (!razaoSocial.trim()) {
@@ -163,6 +207,15 @@ export const CompanyManagementModal: React.FC<Props> = ({
     }
     if (!validarCNPJ(cnpjLimpo)) {
       setMensagemErro('Os dígitos verificadores do CNPJ informado são inválidos.');
+      return;
+    }
+
+    // Prevenção de duplicidade: não permite salvar se o CNPJ já pertencer a outra empresa
+    const jaCadastrada = empresas.some(
+      e => e.id !== empresaEmEdicao?.id && e.cnpj.replace(/\D/g, '') === cnpjLimpo
+    );
+    if (jaCadastrada) {
+      setMensagemErro('Já existe outra empresa cadastrada com este CNPJ no sistema.');
       return;
     }
 
@@ -209,6 +262,7 @@ export const CompanyManagementModal: React.FC<Props> = ({
         setModo('LISTA');
       }
     } catch (err: any) {
+      // Mantém todos os campos intactos e exibe o erro identificado
       setMensagemErro(err.message || 'Erro ao salvar empresa.');
     } finally {
       setSalvando(false);
@@ -558,6 +612,23 @@ export const CompanyManagementModal: React.FC<Props> = ({
                 </div>
               )}
 
+              {avisoCNPJ && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                    avisoCNPJ.includes('localizados') || avisoCNPJ.includes('sucesso')
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                  }`}
+                >
+                  {avisoCNPJ.includes('localizados') || avisoCNPJ.includes('sucesso') ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{avisoCNPJ}</span>
+                </div>
+              )}
+
               {/* Seção 1: Identificação Básica */}
               <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
                 <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
@@ -565,6 +636,39 @@ export const CompanyManagementModal: React.FC<Props> = ({
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        CNPJ <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleConsultarCNPJ()}
+                        disabled={consultandoCNPJ || cnpj.replace(/\D/g, '').length !== 14}
+                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-40 flex items-center gap-1 transition-opacity"
+                        title="Consultar dados da empresa na Receita Federal via CNPJ"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>{consultandoCNPJ ? 'Buscando...' : 'Buscar CNPJ'}</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={cnpj}
+                      onChange={e => {
+                        const novoCnpj = formatarCNPJ(e.target.value);
+                        setCnpj(novoCnpj);
+                        if (novoCnpj.replace(/\D/g, '').length === 14 && !razaoSocial) {
+                          handleConsultarCNPJ(novoCnpj);
+                        }
+                      }}
+                      maxLength={18}
+                      placeholder="00.000.000/0000-00"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Razão Social <span className="text-rose-500">*</span>
@@ -589,21 +693,6 @@ export const CompanyManagementModal: React.FC<Props> = ({
                       onChange={e => setNomeFantasia(e.target.value)}
                       placeholder="Ex: Estrela Modas"
                       className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      CNPJ <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={cnpj}
-                      onChange={e => setCnpj(formatarCNPJ(e.target.value))}
-                      maxLength={18}
-                      placeholder="00.000.000/0000-00"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 

@@ -205,7 +205,7 @@ export interface Empresa {
     uf: string;
     cep: string;
   };
-  contatoResponsavel: {
+  contatoResponsavel?: {
     nome: string;
     email: string;
     telefone: string;
