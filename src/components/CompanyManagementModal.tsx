@@ -316,11 +316,16 @@ export const CompanyManagementModal: React.FC<Props> = ({
       setEmpresaParaExcluir(null);
       setMensagemSucesso(res.message || `Empresa "${nomeEmpresa}" excluída com sucesso.`);
     } catch (err: any) {
+      const rawMsg = err?.message;
+      const msgSegura =
+        typeof rawMsg === 'string' && rawMsg.trim() && rawMsg !== '[object Object]'
+          ? rawMsg
+          : 'Não foi possível excluir a empresa. Tente novamente.';
       setErroExclusao({
-        mensagem: err.message,
-        vinculos: err.vinculos,
-        podeInativar: err.podeInativar,
-        podeForcar: err.podeForcar,
+        mensagem: msgSegura,
+        vinculos: err?.vinculos,
+        podeInativar: err?.podeInativar,
+        podeForcar: err?.podeForcar,
       });
     } finally {
       setExcluindo(false);
@@ -1054,7 +1059,11 @@ export const CompanyManagementModal: React.FC<Props> = ({
               <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl text-xs space-y-2">
                 <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Vínculos impeditivos encontrados</span>
+                  <span>
+                    {erroExclusao.vinculos
+                      ? 'Vínculos impeditivos encontrados'
+                      : 'Não foi possível excluir a empresa'}
+                  </span>
                 </div>
                 <p className="text-amber-800 dark:text-amber-300">{erroExclusao.mensagem}</p>
                 {erroExclusao.vinculos && (

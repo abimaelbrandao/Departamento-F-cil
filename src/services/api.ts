@@ -11,19 +11,60 @@ const API_BASE_URL = /^https?:\/\//i.test(rawApiUrl) ? rawApiUrl.replace(/\/$/, 
 
 // Cache local de segurança para contingência caso a rota do servidor esteja offline ou em deploy estático puro
 const CACHE_EMPRESAS_KEY = 'dp_facil_empresas_cache_v1';
+const CACHE_DELETED_EMPRESAS_KEY = 'dp_facil_empresas_deleted_v1';
+
+function getDeletedEmpresasIds(): Set<string> {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(CACHE_DELETED_EMPRESAS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    // ignora erro de leitura
+  }
+  return new Set();
+}
+
+function markEmpresaDeletedLocal(id: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const ids = getDeletedEmpresasIds();
+    ids.add(id);
+    localStorage.setItem(CACHE_DELETED_EMPRESAS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignora erro de escrita
+  }
+}
+
+function unmarkEmpresaDeletedLocal(id: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const ids = getDeletedEmpresasIds();
+    if (ids.delete(id)) {
+      localStorage.setItem(CACHE_DELETED_EMPRESAS_KEY, JSON.stringify(Array.from(ids)));
+    }
+  } catch {
+    // ignora erro de escrita
+  }
+}
 
 function getEmpresasCache(): Empresa[] {
+  const deleted = getDeletedEmpresasIds();
   try {
     if (typeof window === 'undefined') return EMPRESAS_INICIAIS;
     const item = localStorage.getItem(CACHE_EMPRESAS_KEY);
     if (item) {
       const parsed = JSON.parse(item);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((e: Empresa) => !deleted.has(e.id));
+      }
     }
   } catch (e) {
     console.warn('Erro ao ler cache local de empresas:', e);
   }
-  return EMPRESAS_INICIAIS;
+  return EMPRESAS_INICIAIS.filter(e => !deleted.has(e.id));
 }
 
 function setEmpresasCache(empresas: Empresa[]) {
@@ -34,6 +75,31 @@ function setEmpresasCache(empresas: Empresa[]) {
   } catch (e) {
     console.warn('Erro ao gravar cache local de empresas:', e);
   }
+}
+
+function extractErrorMessage(payload: any, fallback: string): string {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload.trim() || fallback;
+
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    return payload.error.trim();
+  }
+  if (payload.error && typeof payload.error === 'object') {
+    const nested = payload.error.message || payload.error.error || payload.error.code;
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  if (payload.message && typeof payload.message === 'object') {
+    const nested = payload.message.message || payload.message.error;
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  return fallback;
 }
 
 /**
@@ -62,9 +128,11 @@ async function requestJson<T>(
       headers: reqHeaders,
     });
   } catch (netErr: any) {
-    throw new Error(
+    const err = new Error(
       `Falha de conexão com o servidor ao ${actionDescription}: ${netErr.message || 'Verifique sua conexão de rede ou a URL da API.'}`
-    );
+    ) as any;
+    err.isBackendUnavailable = true;
+    throw err;
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -80,15 +148,20 @@ async function requestJson<T>(
       }
 
       if (errPayload) {
-        const error = new Error(
-          errPayload.error || errPayload.message || `Erro HTTP ${res.status} ao ${actionDescription}`
-        ) as any;
+        const isPlatformErrorObj =
+          typeof errPayload.error === 'object' && errPayload.error !== null;
+        const msg = extractErrorMessage(
+          errPayload,
+          `Erro HTTP ${res.status} ao ${actionDescription}`
+        );
+        const error = new Error(msg) as any;
         error.status = res.status;
         error.vinculos = errPayload.vinculos;
         error.podeInativar = errPayload.podeInativar;
         error.podeForcar = errPayload.podeForcar;
         error.sugestao = errPayload.sugestao;
         error.podeDesligar = errPayload.podeDesligar;
+        error.isBackendUnavailable = res.status >= 500 || isPlatformErrorObj;
         throw error;
       }
     }
@@ -101,6 +174,7 @@ async function requestJson<T>(
       ) as any;
       err.status = 404;
       err.isNotFound = true;
+      err.isBackendUnavailable = true;
       throw err;
     }
 
@@ -108,6 +182,7 @@ async function requestJson<T>(
       `O servidor retornou status ${res.status} (${res.statusText || 'Erro'}) ao ${actionDescription}.`
     ) as any;
     err.status = res.status;
+    err.isBackendUnavailable = res.status >= 500;
     throw err;
   }
 
@@ -236,8 +311,10 @@ export const api = {
     try {
       const empresas = await requestJson<Empresa[]>('/api/empresas', undefined, 'carregar empresas');
       if (Array.isArray(empresas)) {
-        setEmpresasCache(empresas);
-        return empresas;
+        const deleted = getDeletedEmpresasIds();
+        const filtradas = empresas.filter(e => !deleted.has(e.id));
+        setEmpresasCache(filtradas);
+        return filtradas;
       }
     } catch (err: any) {
       console.warn('[Departamento Fácil] API /api/empresas indisponível, recorrendo ao cache local persistente:', err.message);
@@ -270,6 +347,7 @@ export const api = {
         'salvar empresa'
       );
 
+      unmarkEmpresaDeletedLocal(salva.id);
       // Atualiza cache de contingência
       const novasEmpresas = empresa.id
         ? cacheAtual.map(e => (e.id === salva.id ? salva : e))
@@ -278,9 +356,9 @@ export const api = {
 
       return salva;
     } catch (err: any) {
-      // Se a falha for 404 (deploy puramente estático sem Serverless Function ativa na Vercel),
+      // Se a rota de backend estiver indisponível na Vercel (404/HTML/5xx serverless),
       // salvamos no armazenamento local persistente de contingência para que o usuário não perca seu trabalho!
-      if (err.isNotFound || err.isHtmlResponse || (err.status === 404)) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
         console.warn('[Departamento Fácil] Rota de backend ausente na Vercel. Persistindo com segurança no armazenamento local.');
         const empresaSalva: Empresa = {
           id: empresa.id || `emp-local-${Date.now()}`,
@@ -345,7 +423,7 @@ export const api = {
       setEmpresasCache(cache);
       return atualizada;
     } catch (err: any) {
-      if (err.isNotFound || err.status === 404) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
         const cache = getEmpresasCache();
         const emp = cache.find(e => e.id === id);
         if (emp) {
@@ -365,11 +443,13 @@ export const api = {
         { method: 'DELETE' },
         'excluir empresa'
       );
+      markEmpresaDeletedLocal(id);
       const cache = getEmpresasCache().filter(e => e.id !== id);
       setEmpresasCache(cache);
       return res;
     } catch (err: any) {
-      if (err.isNotFound || err.isHtmlResponse || err.status === 404) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        markEmpresaDeletedLocal(id);
         const cache = getEmpresasCache().filter(e => e.id !== id);
         setEmpresasCache(cache);
         return { success: true, message: 'Empresa removida com sucesso do armazenamento.' };

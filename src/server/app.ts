@@ -2,16 +2,25 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS, RUBRICAS_SISTEMA, PERIODOS_FERIAS_INICIAIS, AGENDA_INICIAL, ESOCIAL_EVENTOS_INICIAIS } from '../data/initialData';
 import { processarFolhaEmpregado } from '../services/calculosTrabalhistas';
 import { calcularFeriasComApropriacao, calcularRescisaoCompleta } from '../services/calculosFeriasRescisao';
 import { Empresa, Empregado, Rubrica, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from '../types/dp';
 import { validarCNPJ, validarCPF } from '../utils/formatters';
 
-dotenv.config();
+try {
+  dotenv.config();
+} catch {
+  // Ignora erro caso .env não exista no ambiente serverless
+}
 
-const DATA_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'data');
+const IS_SERVERLESS = Boolean(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NOW_REGION
+);
+const DATA_DIR = IS_SERVERLESS ? '/tmp' : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'departamento_facil.json');
 
 // Interface para o banco persistente
@@ -34,8 +43,12 @@ interface DatabaseSchema {
 }
 
 function inicializarDB(): DatabaseSchema {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('Aviso ao criar diretório de dados:', err);
   }
 
   if (fs.existsSync(DB_FILE)) {
@@ -246,7 +259,11 @@ function inicializarDB(): DatabaseSchema {
     ],
   };
 
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Aviso ao gravar DB inicial em disco (executando em memória):', err);
+  }
   return initialDb;
 }
 
@@ -1574,6 +1591,7 @@ app.use(express.json({ limit: '10mb' }));
         });
       }
 
+      const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Você é um Consultor Jurídico Trabalhista e Especialista Sênior em Departamento Pessoal no Brasil (CLT, eSocial, Previdência, FGTS Digital e Receita Federal).
 Contexto do sistema Departamento Fácil: ${JSON.stringify(contexto || {})}
@@ -1671,6 +1689,18 @@ Mantenha a resposta concisa, profissional e didática.`;
 
     return res.status(404).json({
       error: 'Não foi possível consultar automaticamente o CNPJ na Receita Federal. Preencha os campos manualmente.',
+    });
+  });
+
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Rota da API não encontrada.' });
+  });
+
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[API Error]', err);
+    if (res.headersSent) return;
+    res.status(err?.status || 500).json({
+      error: typeof err?.message === 'string' ? err.message : 'Erro interno do servidor.',
     });
   });
 
