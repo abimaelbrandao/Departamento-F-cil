@@ -60,9 +60,11 @@ export const CompetenceModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (isOpen && empresa?.id) {
+      setModo(abrirCadastroDireto ? 'NOVA' : 'LISTA');
+      setStatusMsg(null);
       carregarCompetencias();
     }
-  }, [isOpen, empresa?.id]);
+  }, [isOpen, empresa?.id, abrirCadastroDireto]);
 
   const carregarCompetencias = async () => {
     try {

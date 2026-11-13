@@ -164,10 +164,11 @@ export function calcularRescisaoCompleta(
   saldoFGTSAtualComprovado: number = 0,
   adiantamentoJaPagoNaCompetencia: number = 0
 ): RescisaoSimulada {
-  const salarioBase = empregado.salarioBase;
+  const salarioBase = Number(empregado.salarioBase || 0);
   const salarioDia = salarioBase / 30;
 
-  const dAdmissao = new Date(empregado.dataAdmissao + 'T00:00:00');
+  const dataAdmBase = empregado.dataAdmissao || empregado.dataPrevisaoInicio || dataDesligamento;
+  const dAdmissao = new Date(dataAdmBase + 'T00:00:00');
   const dDesligamento = new Date(dataDesligamento + 'T00:00:00');
 
   // Tempo de serviço em anos completos

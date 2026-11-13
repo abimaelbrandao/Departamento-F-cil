@@ -270,6 +270,16 @@
           "valorNovo": 9200,
           "motivo": "Promoção por mérito e desempenho técnico sênior",
           "responsavel": "Renata Albuquerque (DP)"
+        },
+        {
+          "id": "hist-cancel-resc-1794587771415",
+          "dataVigencia": "2026-11-13",
+          "dataRegistro": "2026-11-13",
+          "tipo": "LOTACAO",
+          "valorAnterior": "Desligado",
+          "valorNovo": "Ativo (Rescisão Cancelada)",
+          "motivo": "Teste automatizado",
+          "responsavel": "Operador DP"
         }
       ],
       "optanteFGTS": true,
@@ -2576,7 +2586,129 @@
       ]
     }
   ],
-  "rescisoes": [],
+  "rescisoes": [
+    {
+      "id": "rescisao-emp-lucas-1794587771397",
+      "empregadoId": "emp-lucas",
+      "empresaId": "emp-1",
+      "motivo": "SEM_JUSTA_CAUSA_EMPREGADOR",
+      "dataAviso": "2026-10-14",
+      "dataDesligamento": "2026-11-13",
+      "tipoAviso": "TRABALHADO",
+      "diasAvisoIndenizado": 12,
+      "saldoSalarioDias": 13,
+      "valorSaldoSalario": 3986.67,
+      "valorAvisoPrevio": 3680,
+      "decimoTerceiroProporcional": 7666.67,
+      "decimoTerceiroIndenizado": 0,
+      "feriasVencidasComTerco": 0,
+      "feriasProporcionaisComTerco": 8177.77,
+      "feriasProporcionaisBase": 6133.33,
+      "tercoFeriasConstitucional": 2044.44,
+      "feriasVencidasBase": 0,
+      "tercoFeriasVencidas": 0,
+      "avosDecimoTerceiro": 10,
+      "avosFerias": 8,
+      "remuneracaoMesAnterior": 9200,
+      "codigoAfastamento": "SJ2",
+      "causaAfastamentoDescricao": "Despedida sem justa causa, pelo empregador",
+      "tipoContratoDescricao": "1 - Contrato de trabalho por prazo indeterminado",
+      "multaFGTS": 17369.6,
+      "saldoFGTSParaMulta": 43424,
+      "descontos": {
+        "inssSaldoSalario": 377.22,
+        "irrfRescisao": 0,
+        "adiantamentoJaPago": 0,
+        "outrosDescontos": 892.15,
+        "inssDecimoTerceiro": 892.15,
+        "irrfDecimoTerceiro": 0,
+        "avisoPrevioDescontado": 0,
+        "pensaoAlimenticia": 0
+      },
+      "totalBruto": 23511.11,
+      "totalDescontos": 1269.37,
+      "liquidoRescisao": 22241.74,
+      "dataLimitePagamento": "2026-11-23",
+      "demonstrativoFGTS": {
+        "competenciasCalculadas": [
+          {
+            "competencia": "11/2026",
+            "valorDevido": 736,
+            "depositado": false
+          },
+          {
+            "competencia": "10/2026",
+            "valorDevido": 736,
+            "depositado": false
+          },
+          {
+            "competencia": "09/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "08/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "07/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "06/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "05/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "04/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "03/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "02/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "01/2026",
+            "valorDevido": 736,
+            "depositado": true
+          },
+          {
+            "competencia": "12/2025",
+            "valorDevido": 736,
+            "depositado": true
+          }
+        ],
+        "totalCalculado": 8832,
+        "totalDepositado": 7360,
+        "diferencasPendentes": 1472
+      },
+      "pendenciasDocumentais": [
+        "Exame Médico Demissional (ASO Demissional)",
+        "Devolução de crachá e equipamentos de trabalho",
+        "Comprovante de entrega da Guia GRRF / FGTS Digital",
+        "Assinatura do Termo de Rescisão de Contrato de Trabalho (TRCT)",
+        "Anotação de baixa na Carteira de Trabalho Digital (eSocial S-2299)"
+      ],
+      "status": "CANCELADA",
+      "dataConfirmacao": "2026-11-13T16:36:11.403Z",
+      "dataCancelamento": "2026-11-13T16:36:11.415Z",
+      "motivoCancelamento": "Teste automatizado"
+    }
+  ],
   "documentos": [
     {
       "id": "doc-contrato-carlos",
@@ -2589,6 +2721,50 @@
       "status": "RECIBO_ASSINADO",
       "dataAssinatura": "2026-03-20",
       "assinanteNome": "Carlos Eduardo dos Santos",
+      "versao": 1
+    },
+    {
+      "id": "doc-contrato-emp-lucas",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-lucas",
+      "tipo": "CONTRATO_TRABALHO_CLT",
+      "titulo": "Contrato Individual de Trabalho CLT",
+      "conteudoHtml": "Contrato gerado automaticamente na admissão.",
+      "dataEmissao": "2022-03-10",
+      "status": "EMITIDO",
+      "versao": 1
+    },
+    {
+      "id": "doc-contrato-emp-mariana",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-mariana",
+      "tipo": "CONTRATO_TRABALHO_CLT",
+      "titulo": "Contrato Individual de Trabalho CLT",
+      "conteudoHtml": "Contrato gerado automaticamente na admissão.",
+      "dataEmissao": "2023-05-15",
+      "status": "EMITIDO",
+      "versao": 1
+    },
+    {
+      "id": "doc-contrato-emp-beatriz",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-beatriz",
+      "tipo": "CONTRATO_TRABALHO_CLT",
+      "titulo": "Contrato Individual de Trabalho CLT",
+      "conteudoHtml": "Contrato gerado automaticamente na admissão.",
+      "dataEmissao": "2021-08-01",
+      "status": "EMITIDO",
+      "versao": 1
+    },
+    {
+      "id": "doc-contrato-emp-diretor-marcos",
+      "empresaId": "emp-1",
+      "empregadoId": "emp-diretor-marcos",
+      "tipo": "CONTRATO_TRABALHO_CLT",
+      "titulo": "Contrato Individual de Trabalho CLT",
+      "conteudoHtml": "Contrato gerado automaticamente na admissão.",
+      "dataEmissao": "2020-01-02",
+      "status": "EMITIDO",
       "versao": 1
     }
   ],
@@ -2656,6 +2832,15 @@
   ],
   "esocial": [
     {
+      "id": "es-2299-1794587771403",
+      "codigoEvento": "S-2299",
+      "descricao": "Desligamento do Trabalhador - Lucas Gabriel de Albuquerque",
+      "empregadoNome": "Lucas Gabriel de Albuquerque",
+      "statusEnvio": "GERADO",
+      "dataTransmissao": "2026-11-13T16:36:11.403Z",
+      "arquivoXmlSimulado": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><eSocial><evtDeslig><cpfTrab>38829104812</cpfTrab><dtDeslig>2026-11-13</dtDeslig><mtvDeslig>SEM_JUSTA_CAUSA_EMPREGADOR</mtvDeslig></evtDeslig></eSocial>"
+    },
+    {
       "id": "es-1794586601687",
       "codigoEvento": "S-2200",
       "descricao": "Cadastramento Inicial e Admissão - Teste Admissao Local",
@@ -2706,6 +2891,18 @@
     "import_folha_ponto_abril_2026.csv"
   ],
   "auditoriaLogs": [
+    {
+      "id": "log-cancel-resc-1794587771415",
+      "dataHora": "2026-11-13T16:36:11.415Z",
+      "usuario": "Operador DP",
+      "acao": "CANCELAMENTO_RESCISAO",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "empregadoId": "emp-lucas",
+        "motivo": "Teste automatizado",
+        "canceladas": 1
+      }
+    },
     {
       "id": "log-1",
       "dataHora": "2026-05-02T18:00:00Z",

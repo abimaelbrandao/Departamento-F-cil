@@ -465,8 +465,10 @@ export interface RescisaoSimulada {
     diferencasPendentes: number;
   };
   pendenciasDocumentais: string[];
-  status: 'SIMULACAO' | 'CONFIRMADA' | 'PAGA' | 'HOMOLOGADA';
+  status: 'SIMULACAO' | 'CONFIRMADA' | 'PAGA' | 'HOMOLOGADA' | 'CANCELADA';
   dataConfirmacao?: string;
+  dataCancelamento?: string;
+  motivoCancelamento?: string;
   comprovantePagamento?: string;
   trctAssinado?: boolean;
 }

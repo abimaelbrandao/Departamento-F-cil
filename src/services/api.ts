@@ -1,6 +1,7 @@
-import { Empresa, Empregado, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from '../types/dp';
+import { Empresa, Empregado, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa, MotivoRescisao } from '../types/dp';
 import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS } from '../data/initialData';
 import { validarCPF } from '../utils/formatters';
+import { calcularRescisaoCompleta } from './calculosFeriasRescisao';
 
 // URL base configurável via variável de ambiente VITE_API_URL (aceita apenas URLs HTTP/HTTPS válidas)
 const rawApiUrl = (
@@ -145,6 +146,167 @@ function setEmpregadosCache(empregados: Empregado[]) {
   }
 }
 
+const CACHE_COMPETENCIAS_KEY = 'dp_facil_competencias_cache_v1';
+const CACHE_DELETED_COMPETENCIAS_KEY = 'dp_facil_competencias_deleted_v1';
+const CACHE_DOCUMENTOS_KEY = 'dp_facil_documentos_cache_v1';
+const CACHE_RESCISOES_KEY = 'dp_facil_rescisoes_cache_v1';
+
+function compKey(empresaId: string, competencia: string) {
+  return `${empresaId}_${competencia}`;
+}
+
+function getDeletedCompetenciasKeys(): Set<string> {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(CACHE_DELETED_COMPETENCIAS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    // ignora
+  }
+  return new Set();
+}
+
+function markCompetenciaDeletedLocal(empresaId: string, competencia: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const keys = getDeletedCompetenciasKeys();
+    keys.add(compKey(empresaId, competencia));
+    localStorage.setItem(CACHE_DELETED_COMPETENCIAS_KEY, JSON.stringify(Array.from(keys)));
+  } catch {
+    // ignora
+  }
+}
+
+function unmarkCompetenciaDeletedLocal(empresaId: string, competencia: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const keys = getDeletedCompetenciasKeys();
+    if (keys.delete(compKey(empresaId, competencia))) {
+      localStorage.setItem(CACHE_DELETED_COMPETENCIAS_KEY, JSON.stringify(Array.from(keys)));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function getCompetenciasCache(): CompetenciaFolha[] {
+  const deleted = getDeletedCompetenciasKeys();
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem(CACHE_COMPETENCIAS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((c: CompetenciaFolha) => !deleted.has(compKey(c.empresaId, c.competencia)));
+      }
+    }
+  } catch {
+    // ignora
+  }
+  return [];
+}
+
+function setCompetenciasCache(competencias: CompetenciaFolha[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_COMPETENCIAS_KEY, JSON.stringify(competencias));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function ordenarCompetencias(list: CompetenciaFolha[]): CompetenciaFolha[] {
+  return [...list].sort((a, b) => {
+    const pA = (a.competencia || '').split('/');
+    const pB = (b.competencia || '').split('/');
+    const mA = parseInt(pA[0], 10) || 1;
+    const yA = parseInt(pA[1], 10) || 2026;
+    const mB = parseInt(pB[0], 10) || 1;
+    const yB = parseInt(pB[1], 10) || 2026;
+    return yB * 100 + mB - (yA * 100 + mA);
+  });
+}
+
+function getDocumentosCache(): ContratoDocumento[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem(CACHE_DOCUMENTOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignora
+  }
+  return [];
+}
+
+function setDocumentosCache(docs: ContratoDocumento[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_DOCUMENTOS_KEY, JSON.stringify(docs));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function ensureContratoAdmissaoLocal(emp: Empregado): ContratoDocumento | null {
+  if (!emp || !emp.id || emp.status === 'em_admissao') return null;
+  const docs = getDocumentosCache();
+  const existente = docs.find(
+    d =>
+      d.empregadoId === emp.id &&
+      (d.tipo === 'CONTRATO_EXPERIENCIA' || d.tipo === 'CONTRATO_TRABALHO_CLT')
+  );
+  if (existente) return existente;
+
+  const novoDoc: ContratoDocumento = {
+    id: `doc-contrato-${emp.id}`,
+    empresaId: emp.empresaId,
+    empregadoId: emp.id,
+    tipo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'CONTRATO_EXPERIENCIA' : 'CONTRATO_TRABALHO_CLT',
+    titulo:
+      emp.tipoContrato === 'EXPERIENCIA_45_45'
+        ? 'Contrato de Experiência (45+45 dias)'
+        : 'Contrato Individual de Trabalho CLT',
+    conteudoHtml: 'Contrato gerado automaticamente na admissão.',
+    dataEmissao: emp.dataAdmissao || emp.dataPrevisaoInicio || new Date().toISOString().split('T')[0],
+    status: 'EMITIDO',
+    versao: 1,
+  };
+  setDocumentosCache([...docs, novoDoc]);
+  return novoDoc;
+}
+
+function getRescisoesCache(): RescisaoSimulada[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem(CACHE_RESCISOES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignora
+  }
+  return [];
+}
+
+function setRescisoesCache(rescisoes: RescisaoSimulada[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_RESCISOES_KEY, JSON.stringify(rescisoes));
+    }
+  } catch {
+    // ignora
+  }
+}
+
 function extractErrorMessage(payload: any, fallback: string): string {
   if (!payload) return fallback;
   if (typeof payload === 'string') return payload.trim() || fallback;
@@ -227,6 +389,7 @@ async function requestJson<T>(
         error.vinculos = errPayload.vinculos;
         error.podeInativar = errPayload.podeInativar;
         error.podeForcar = errPayload.podeForcar;
+        error.count = errPayload.count;
         error.sugestao = errPayload.sugestao;
         error.podeDesligar = errPayload.podeDesligar;
         error.isBackendUnavailable = res.status >= 500 || isPlatformErrorObj;
@@ -601,6 +764,9 @@ export const api = {
         ? cacheAtual.map(e => (e.id === salvo.id ? salvo : e))
         : [...cacheAtual, salvo];
       setEmpregadosCache(atualizado);
+      if (salvo.status === 'ativo') {
+        ensureContratoAdmissaoLocal(salvo);
+      }
       return salvo;
     } catch (err: any) {
       if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
@@ -634,6 +800,9 @@ export const api = {
           ? cacheAtual.map(e => (e.id === novoOuAtualizado.id ? novoOuAtualizado : e))
           : [...cacheAtual, novoOuAtualizado];
         setEmpregadosCache(atualizado);
+        if (novoOuAtualizado.status === 'ativo') {
+          ensureContratoAdmissaoLocal(novoOuAtualizado);
+        }
         return novoOuAtualizado;
       }
 
@@ -707,6 +876,13 @@ export const api = {
         const cache = getEmpregadosCache();
         const exists = cache.some(e => e.id === id);
         setEmpregadosCache(exists ? cache.map(e => (e.id === id ? res.empregado : e)) : [...cache, res.empregado]);
+        ensureContratoAdmissaoLocal(res.empregado);
+      }
+      if (res?.contrato) {
+        const docs = getDocumentosCache();
+        if (!docs.some(d => d.id === res.contrato.id)) {
+          setDocumentosCache([...docs, res.contrato]);
+        }
       }
       return res;
     } catch (err: any) {
@@ -718,7 +894,8 @@ export const api = {
           emp.dataAdmissao = emp.dataPrevisaoInicio || emp.dataAdmissao || new Date().toISOString().split('T')[0];
           const exists = cache.some(e => e.id === emp.id);
           setEmpregadosCache(exists ? cache.map(e => (e.id === emp.id ? emp : e)) : [...cache, emp]);
-          return { success: true, empregado: emp };
+          const contrato = ensureContratoAdmissaoLocal(emp);
+          return { success: true, empregado: emp, contrato };
         }
       }
       throw err;
@@ -794,13 +971,19 @@ export const api = {
         );
       } catch (pathErr) {
         console.warn('[getFolha] Fallback seguro para folha inicial:', pathErr);
+        const compCache = getCompetenciasCache().find(
+          c => c.empresaId === empresaId && c.competencia === compDecodificada
+        );
+        const ativosEmpresa = getEmpregadosCache().filter(
+          e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+        ).length;
         return {
-          competencia: {
+          competencia: compCache || {
             id: `comp-${empresaId}-${compDecodificada.replace(/\D/g, '')}`,
             empresaId,
             competencia: compDecodificada,
             status: 'ABERTA',
-            totalEmpregadosAtivos: 0,
+            totalEmpregadosAtivos: ativosEmpresa,
             totalCalculados: 0,
             totalProventos: 0,
             totalDescontos: 0,
@@ -899,43 +1082,150 @@ export const api = {
 
   // Competências
   async getCompetencias(empresaId: string): Promise<CompetenciaFolha[]> {
+    const cacheAtual = getCompetenciasCache();
+    const deleted = getDeletedCompetenciasKeys();
     try {
-      return await requestJson<CompetenciaFolha[]>(`/api/competencias/${empresaId}`, undefined, 'listar competências');
-    } catch {
-      return [];
+      const remotos = await requestJson<CompetenciaFolha[]>(`/api/competencias/${encodeURIComponent(empresaId)}`, undefined, 'listar competências');
+      if (Array.isArray(remotos)) {
+        const filtrados = remotos.filter(c => !deleted.has(compKey(c.empresaId || empresaId, c.competencia)));
+        const keysRemotas = new Set(filtrados.map(c => compKey(c.empresaId || empresaId, c.competencia)));
+        const extrasLocais = cacheAtual.filter(
+          c => c.empresaId === empresaId && !keysRemotas.has(compKey(c.empresaId, c.competencia))
+        );
+        const combinados = ordenarCompetencias([...filtrados, ...extrasLocais]);
+        const outrasEmpresas = cacheAtual.filter(c => c.empresaId !== empresaId);
+        setCompetenciasCache([...outrasEmpresas, ...combinados]);
+        return combinados;
+      }
+    } catch (err: any) {
+      console.warn('[Departamento Fácil] Erro ao listar competências no servidor, recorrendo ao cache local:', err.message);
     }
+    return ordenarCompetencias(cacheAtual.filter(c => c.empresaId === empresaId));
   },
 
   async criarCompetencia(dados: { empresaId: string; competencia: string; tipoFolha?: string; parcela13?: string }): Promise<{ success: boolean; existe?: boolean; competencia?: CompetenciaFolha; message?: string }> {
-    return requestJson<{ success: boolean; existe?: boolean; competencia?: CompetenciaFolha; message?: string }>(
-      '/api/competencias',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'criar competência'
-    );
+    const cacheAtual = getCompetenciasCache();
+    try {
+      const res = await requestJson<{ success: boolean; existe?: boolean; competencia?: CompetenciaFolha; message?: string }>(
+        '/api/competencias',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'criar competência'
+      );
+      if (res?.competencia) {
+        unmarkCompetenciaDeletedLocal(dados.empresaId, res.competencia.competencia);
+        const keyNova = compKey(dados.empresaId, res.competencia.competencia);
+        const semDuplicada = cacheAtual.filter(c => compKey(c.empresaId, c.competencia) !== keyNova);
+        setCompetenciasCache([...semDuplicada, res.competencia]);
+      }
+      return { ...res, success: res?.success ?? true };
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        console.warn('[Departamento Fácil] Backend indisponível ao criar competência. Salvando localmente:', err.message);
+        unmarkCompetenciaDeletedLocal(dados.empresaId, dados.competencia);
+        const existente = cacheAtual.find(
+          c => c.empresaId === dados.empresaId && c.competencia === dados.competencia
+        );
+        if (existente) {
+          return {
+            success: true,
+            existe: true,
+            competencia: existente,
+            message: 'Competência já existente.',
+          };
+        }
+        const ativosCount = getEmpregadosCache().filter(
+          e => e.empresaId === dados.empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+        ).length;
+        const novaComp: CompetenciaFolha = {
+          id: `comp-${dados.empresaId}-${dados.competencia.replace(/\D/g, '')}`,
+          empresaId: dados.empresaId,
+          competencia: dados.competencia,
+          status: 'ABERTA',
+          tipoFolha: (dados.tipoFolha as any) || 'MENSAL',
+          parcela13: dados.parcela13 as any,
+          totalEmpregadosAtivos: ativosCount,
+          totalCalculados: 0,
+          totalProventos: 0,
+          totalDescontos: 0,
+          totalLiquido: 0,
+          totalEncargosEmpresa: 0,
+          totalFGTS: 0,
+          errosBloqueantes: [],
+          alertasRevisao: [],
+        };
+        setCompetenciasCache([...cacheAtual, novaComp]);
+        return {
+          success: true,
+          existe: false,
+          competencia: novaComp,
+          message: `Competência ${dados.competencia} criada com sucesso.`,
+        };
+      }
+      throw err;
+    }
   },
 
   async atualizarCompetencia(empresaId: string, competencia: string, dados: { novaCompetencia?: string; tipoFolha?: string }) {
-    return requestJson(
-      `/api/competencias/${empresaId}/${encodeURIComponent(competencia)}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'atualizar competência'
-    );
+    const cacheAtual = getCompetenciasCache();
+    try {
+      const res: any = await requestJson(
+        `/api/competencias/${encodeURIComponent(empresaId)}/${encodeURIComponent(competencia)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'atualizar competência'
+      );
+      const atualizado = cacheAtual.map(c =>
+        c.empresaId === empresaId && c.competencia === competencia ? res : c
+      );
+      setCompetenciasCache(atualizado);
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const comp = cacheAtual.find(c => c.empresaId === empresaId && c.competencia === competencia);
+        if (comp) {
+          if (dados.novaCompetencia && dados.novaCompetencia !== competencia) {
+            if (cacheAtual.some(c => c.empresaId === empresaId && c.competencia === dados.novaCompetencia)) {
+              throw new Error(`A competência ${dados.novaCompetencia} já existe nesta empresa.`);
+            }
+            markCompetenciaDeletedLocal(empresaId, competencia);
+            unmarkCompetenciaDeletedLocal(empresaId, dados.novaCompetencia);
+            comp.competencia = dados.novaCompetencia;
+          }
+          if (dados.tipoFolha) comp.tipoFolha = dados.tipoFolha as any;
+          setCompetenciasCache([...cacheAtual]);
+          return comp;
+        }
+      }
+      throw err;
+    }
   },
 
   async excluirCompetencia(empresaId: string, competencia: string, force?: boolean): Promise<{ success: boolean; message: string }> {
-    return requestJson(
-      `/api/competencias/${empresaId}/${encodeURIComponent(competencia)}?force=${Boolean(force)}`,
-      { method: 'DELETE' },
-      'excluir competência'
-    );
+    const cacheAtual = getCompetenciasCache();
+    try {
+      const res = await requestJson<{ success: boolean; message: string }>(
+        `/api/competencias/${encodeURIComponent(empresaId)}/${encodeURIComponent(competencia)}?force=${Boolean(force)}`,
+        { method: 'DELETE' },
+        'excluir competência'
+      );
+      markCompetenciaDeletedLocal(empresaId, competencia);
+      setCompetenciasCache(cacheAtual.filter(c => !(c.empresaId === empresaId && c.competencia === competencia)));
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        markCompetenciaDeletedLocal(empresaId, competencia);
+        setCompetenciasCache(cacheAtual.filter(c => !(c.empresaId === empresaId && c.competencia === competencia)));
+        return { success: true, message: `Competência ${competencia} excluída com sucesso.` };
+      }
+      throw err;
+    }
   },
 
   async getLancamentos(competencia?: string, empregadoId?: string, empresaId?: string): Promise<LancamentoVariavel[]> {
@@ -1018,48 +1308,259 @@ export const api = {
     );
   },
 
-  async simularRescisao(dados: { empregadoId: string; motivo: string; dataDesligamento: string; tipoAviso: string; saldoFGTSComprovado?: number; adiantamentoPago?: number }): Promise<RescisaoSimulada> {
-    return requestJson(
-      '/api/rescisao/simular',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'simular rescisão'
-    );
-  },
-
-  async confirmarRescisao(rescisao: RescisaoSimulada) {
-    return requestJson(
-      '/api/rescisao/confirmar',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rescisao),
-      },
-      'confirmar rescisão'
-    );
-  },
-
-  async getDocumentos(empresaId: string): Promise<ContratoDocumento[]> {
+  async getRescisoes(empresaId: string): Promise<RescisaoSimulada[]> {
+    const cacheAtual = getRescisoesCache();
     try {
-      return await requestJson(`/api/documentos/${empresaId}`, undefined, 'listar documentos');
-    } catch {
-      return [];
+      const remotos = await requestJson<RescisaoSimulada[]>(
+        `/api/rescisoes/${encodeURIComponent(empresaId)}`,
+        undefined,
+        'listar rescisões'
+      );
+      if (Array.isArray(remotos)) {
+        const idsRemotos = new Set(remotos.map(r => r.id));
+        const locaisExtras = cacheAtual.filter(
+          r => r.empresaId === empresaId && r.status !== 'CANCELADA' && !idsRemotos.has(r.id)
+        );
+        const combinados = [...remotos, ...locaisExtras];
+        const outrasEmpresas = cacheAtual.filter(r => r.empresaId !== empresaId);
+        setRescisoesCache([...outrasEmpresas, ...combinados]);
+        return combinados;
+      }
+    } catch (err: any) {
+      console.warn('[Departamento Fácil] Erro ao listar rescisões no servidor, usando cache local:', err.message);
+    }
+    return cacheAtual.filter(r => r.empresaId === empresaId && r.status !== 'CANCELADA');
+  },
+
+  async simularRescisao(dados: {
+    empregadoId: string;
+    motivo: string;
+    dataDesligamento: string;
+    tipoAviso: string;
+    saldoFGTSComprovado?: number;
+    adiantamentoPago?: number;
+    empregado?: Empregado;
+  }): Promise<RescisaoSimulada> {
+    try {
+      return await requestJson<RescisaoSimulada>(
+        '/api/rescisao/simular',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'simular rescisão'
+      );
+    } catch (err: any) {
+      const empFallback =
+        dados.empregado || getEmpregadosCache().find(e => e.id === dados.empregadoId);
+      if (
+        empFallback &&
+        (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500)
+      ) {
+        console.warn('[Departamento Fácil] Calculando simulação de rescisão em modo contingência local:', err.message);
+        return calcularRescisaoCompleta(
+          empFallback,
+          dados.motivo as MotivoRescisao,
+          dados.dataDesligamento,
+          dados.tipoAviso as 'TRABALHADO' | 'INDENIZADO' | 'DISPENSADO',
+          Number(dados.saldoFGTSComprovado || 0),
+          Number(dados.adiantamentoPago || 0)
+        );
+      }
+      throw err;
     }
   },
 
-  async atualizarStatusDocumento(dados: { documentoId: string; status: string; dataPagamento?: string; dataAssinatura?: string; assinanteNome?: string; comprovanteAnexo?: string }) {
-    return requestJson(
-      '/api/documentos/status',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'atualizar status do documento'
+  async confirmarRescisao(rescisao: RescisaoSimulada, empregadoFallback?: Empregado) {
+    const rescisaoFinal: RescisaoSimulada = {
+      ...rescisao,
+      status: 'CONFIRMADA',
+      isMinuta: false,
+      dataConfirmacao: rescisao.dataConfirmacao || new Date().toISOString(),
+    };
+    const empCache = getEmpregadosCache();
+    const empAlvo = empregadoFallback || empCache.find(e => e.id === rescisaoFinal.empregadoId);
+
+    const atualizarCachesPosConfirmacao = (empAtualizado?: Empregado, rescisaoAtualizada?: RescisaoSimulada) => {
+      const resc = rescisaoAtualizada || rescisaoFinal;
+      const rescCache = getRescisoesCache();
+      const idx = rescCache.findIndex(r => r.id === resc.id);
+      setRescisoesCache(idx >= 0 ? rescCache.map(r => (r.id === resc.id ? resc : r)) : [...rescCache, resc]);
+
+      const empObj = empAtualizado || empAlvo;
+      if (empObj) {
+        empObj.status = 'desligado';
+        empObj.dataDesligamento = resc.dataDesligamento;
+        const exists = empCache.some(e => e.id === empObj.id);
+        setEmpregadosCache(exists ? empCache.map(e => (e.id === empObj.id ? empObj : e)) : [...empCache, empObj]);
+
+        const docs = getDocumentosCache();
+        const trctDocId = `doc-trct-${resc.id}`;
+        if (!docs.some(d => d.id === trctDocId)) {
+          setDocumentosCache([
+            ...docs,
+            {
+              id: trctDocId,
+              empresaId: empObj.empresaId,
+              empregadoId: empObj.id,
+              tipo: 'TRCT',
+              titulo: `TRCT e Termo de Homologação - ${empObj.nomeCompleto}`,
+              conteudoHtml: 'Termo de Rescisão do Contrato de Trabalho gerado na homologação.',
+              dataEmissao: resc.dataDesligamento,
+              status: 'EMITIDO',
+              versao: 1,
+            },
+          ]);
+        }
+      }
+    };
+
+    try {
+      const res: any = await requestJson(
+        '/api/rescisao/confirmar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rescisao: rescisaoFinal, empregado: empAlvo }),
+        },
+        'confirmar rescisão'
+      );
+      atualizarCachesPosConfirmacao(res?.empregado, res?.rescisao);
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        atualizarCachesPosConfirmacao(empAlvo, rescisaoFinal);
+        return { success: true, rescisao: rescisaoFinal, empregado: empAlvo };
+      }
+      throw err;
+    }
+  },
+
+  async cancelarRescisao(dados: {
+    empregadoId: string;
+    rescisaoId?: string;
+    motivo?: string;
+    empregado?: Empregado;
+  }): Promise<{ success: boolean; empregado?: Empregado; rescisoesCanceladas?: number; message?: string }> {
+    const empCache = getEmpregadosCache();
+    const empAlvo = dados.empregado || empCache.find(e => e.id === dados.empregadoId);
+
+    const atualizarCachesPosCancelamento = (empAtualizado?: Empregado) => {
+      const agora = new Date().toISOString();
+      const rescCache = getRescisoesCache().map(r => {
+        if (r.empregadoId === dados.empregadoId && r.status !== 'CANCELADA' && (!dados.rescisaoId || r.id === dados.rescisaoId)) {
+          return {
+            ...r,
+            status: 'CANCELADA' as const,
+            dataCancelamento: agora,
+            motivoCancelamento: dados.motivo || 'Cancelada pelo operador do DP',
+          };
+        }
+        return r;
+      });
+      setRescisoesCache(rescCache);
+
+      const empObj = empAtualizado || empAlvo;
+      if (empObj) {
+        empObj.status = 'ativo';
+        delete empObj.dataDesligamento;
+        const exists = empCache.some(e => e.id === empObj.id);
+        setEmpregadosCache(exists ? empCache.map(e => (e.id === empObj.id ? empObj : e)) : [...empCache, empObj]);
+      }
+
+      const docs = getDocumentosCache().filter(
+        d => !(d.empregadoId === dados.empregadoId && d.tipo === 'TRCT' && d.status !== 'RECIBO_ASSINADO')
+      );
+      setDocumentosCache(docs);
+    };
+
+    try {
+      const res: any = await requestJson(
+        '/api/rescisao/cancelar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...dados, empregado: empAlvo }),
+        },
+        'cancelar rescisão'
+      );
+      atualizarCachesPosCancelamento(res?.empregado);
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        atualizarCachesPosCancelamento(empAlvo);
+        return {
+          success: true,
+          empregado: empAlvo,
+          message: `Rescisão de ${empAlvo?.nomeCompleto || 'colaborador'} cancelada e vínculo reativado com sucesso.`,
+        };
+      }
+      throw err;
+    }
+  },
+
+  async getDocumentos(empresaId: string): Promise<ContratoDocumento[]> {
+    // Garante geração local de contratos de admissão para todos os colaboradores da empresa que já não estão em rascunho
+    const empsEmpresa = getEmpregadosCache().filter(
+      e => e.empresaId === empresaId && e.status !== 'em_admissao'
     );
+    for (const emp of empsEmpresa) {
+      ensureContratoAdmissaoLocal(emp);
+    }
+
+    const cacheAtual = getDocumentosCache();
+    try {
+      const remotos = await requestJson<ContratoDocumento[]>(
+        `/api/documentos/${encodeURIComponent(empresaId)}`,
+        undefined,
+        'listar documentos'
+      );
+      if (Array.isArray(remotos)) {
+        const idsRemotos = new Set(remotos.map(d => d.id));
+        const locaisExtras = cacheAtual.filter(
+          d => d.empresaId === empresaId && !idsRemotos.has(d.id)
+        );
+        const combinados = [...remotos, ...locaisExtras];
+        const outrasEmpresas = cacheAtual.filter(d => d.empresaId !== empresaId);
+        setDocumentosCache([...outrasEmpresas, ...combinados]);
+        return combinados;
+      }
+    } catch (err: any) {
+      console.warn('[Departamento Fácil] Erro ao listar documentos no servidor, recorrendo ao cache local:', err.message);
+    }
+    return cacheAtual.filter(d => d.empresaId === empresaId);
+  },
+
+  async atualizarStatusDocumento(dados: { documentoId: string; status: string; dataPagamento?: string; dataAssinatura?: string; assinanteNome?: string; comprovanteAnexo?: string }) {
+    const cacheAtual = getDocumentosCache();
+    try {
+      const res: any = await requestJson(
+        '/api/documentos/status',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'atualizar status do documento'
+      );
+      setDocumentosCache(cacheAtual.map(d => (d.id === dados.documentoId ? res : d)));
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const doc = cacheAtual.find(d => d.id === dados.documentoId);
+        if (doc) {
+          doc.status = dados.status as any;
+          if (dados.dataPagamento) doc.dataPagamento = dados.dataPagamento;
+          if (dados.dataAssinatura) doc.dataAssinatura = dados.dataAssinatura;
+          if (dados.assinanteNome) doc.assinanteNome = dados.assinanteNome;
+          if (dados.comprovanteAnexo) doc.comprovanteAnexo = dados.comprovanteAnexo;
+          setDocumentosCache([...cacheAtual]);
+          return doc;
+        }
+      }
+      throw err;
+    }
   },
 
   async getMovimentacoes(empresaId: string, competencia: string): Promise<MovimentacaoMensalEmpresa[]> {

@@ -911,16 +911,17 @@ function desenharTRCTPagina1(
   curY += hRow;
 
   // Linha 2 (03, 04)
-  const enderecoEmpresa = `${empresa.endereco.logradouro}, ${empresa.endereco.numero}`;
+  const endEmp = empresa.endereco || ({} as any);
+  const enderecoEmpresa = `${endEmp.logradouro || ''}${endEmp.numero ? `, ${endEmp.numero}` : ''}`;
   desenharCampoTRCT(doc, marginLeft, curY, 140, hRow, '03 Endereço (logradouro, nº, andar, apartamento)', enderecoEmpresa);
-  desenharCampoTRCT(doc, marginLeft + 140, curY, 50, hRow, '04 Bairro', empresa.endereco.bairro);
+  desenharCampoTRCT(doc, marginLeft + 140, curY, 50, hRow, '04 Bairro', endEmp.bairro || '');
   curY += hRow;
 
   // Linha 3 (05, 06, 07, 08, 09)
   const cnaeCod = empresa.cnaePrincipal ? empresa.cnaePrincipal.split(' ')[0] : '4781-4/00';
-  desenharCampoTRCT(doc, marginLeft, curY, 70, hRow, '05 Município', empresa.endereco.cidade);
-  desenharCampoTRCT(doc, marginLeft + 70, curY, 16, hRow, '06 UF', empresa.endereco.uf);
-  desenharCampoTRCT(doc, marginLeft + 86, curY, 28, hRow, '07 CEP', empresa.endereco.cep);
+  desenharCampoTRCT(doc, marginLeft, curY, 70, hRow, '05 Município', endEmp.cidade || '');
+  desenharCampoTRCT(doc, marginLeft + 70, curY, 16, hRow, '06 UF', endEmp.uf || '');
+  desenharCampoTRCT(doc, marginLeft + 86, curY, 28, hRow, '07 CEP', endEmp.cep || '');
   desenharCampoTRCT(doc, marginLeft + 114, curY, 30, hRow, '08 CNAE', cnaeCod);
   desenharCampoTRCT(doc, marginLeft + 144, curY, 46, hRow, '09 CNPJ/CEI Tomador/Obra', empregado.cnpjTomadorObra || '');
   curY += hRow;
@@ -930,28 +931,29 @@ function desenharTRCTPagina1(
   curY += 4.2;
 
   // Linha 1 (10, 11)
-  desenharCampoTRCT(doc, marginLeft, curY, 55, hRow, '10 PIS/PASEP', empregado.pis);
-  desenharCampoTRCT(doc, marginLeft + 55, curY, 135, hRow, '11 Nome', empregado.nomeCompleto.toUpperCase());
+  desenharCampoTRCT(doc, marginLeft, curY, 55, hRow, '10 PIS/PASEP', empregado.pis || '');
+  desenharCampoTRCT(doc, marginLeft + 55, curY, 135, hRow, '11 Nome', (empregado.nomeCompleto || '').toUpperCase());
   curY += hRow;
 
   // Linha 2 (12, 13)
-  const enderecoEmpregado = `${empregado.endereco.logradouro}, ${empregado.endereco.numero}${empregado.endereco.complemento ? ', ' + empregado.endereco.complemento : ''}`;
+  const endTrab = empregado.endereco || ({} as any);
+  const enderecoEmpregado = `${endTrab.logradouro || ''}${endTrab.numero ? `, ${endTrab.numero}` : ''}${endTrab.complemento ? ', ' + endTrab.complemento : ''}`;
   desenharCampoTRCT(doc, marginLeft, curY, 135, hRow, '12 Endereço (logradouro, nº, andar, apartamento)', enderecoEmpregado);
-  desenharCampoTRCT(doc, marginLeft + 135, curY, 55, hRow, '13 Bairro', empregado.endereco.bairro);
+  desenharCampoTRCT(doc, marginLeft + 135, curY, 55, hRow, '13 Bairro', endTrab.bairro || '');
   curY += hRow;
 
   // Linha 3 (14, 15, 16, 17, 18)
-  const ctpsStr = `${empregado.ctpsNumero || '00000842279'}/${empregado.ctpsSerie || '00050'} ${empregado.ctpsUF || empregado.endereco.uf}`;
-  desenharCampoTRCT(doc, marginLeft, curY, 68, hRow, '14 Município', empregado.endereco.cidade);
-  desenharCampoTRCT(doc, marginLeft + 68, curY, 16, hRow, '15 UF', empregado.endereco.uf);
-  desenharCampoTRCT(doc, marginLeft + 84, curY, 28, hRow, '16 CEP', empregado.endereco.cep);
+  const ctpsStr = `${empregado.ctpsNumero || '00000842279'}/${empregado.ctpsSerie || '00050'} ${empregado.ctpsUF || endTrab.uf || ''}`;
+  desenharCampoTRCT(doc, marginLeft, curY, 68, hRow, '14 Município', endTrab.cidade || '');
+  desenharCampoTRCT(doc, marginLeft + 68, curY, 16, hRow, '15 UF', endTrab.uf || '');
+  desenharCampoTRCT(doc, marginLeft + 84, curY, 28, hRow, '16 CEP', endTrab.cep || '');
   desenharCampoTRCT(doc, marginLeft + 112, curY, 46, hRow, '17 CTPS (nº, série, UF)', ctpsStr);
   desenharCampoTRCT(doc, marginLeft + 158, curY, 32, hRow, '18 CPF', formatarCPF(empregado.cpf));
   curY += hRow;
 
   // Linha 4 (19, 20)
   desenharCampoTRCT(doc, marginLeft, curY, 48, hRow, '19 Data de nascimento', formatarData(empregado.dataNascimento));
-  desenharCampoTRCT(doc, marginLeft + 48, curY, 142, hRow, '20 Nome da mãe', (empregado.nomeMae || 'FABRICIANA GARCIA PEREIRA').toUpperCase());
+  desenharCampoTRCT(doc, marginLeft + 48, curY, 142, hRow, '20 Nome da mãe', (empregado.nomeMae || 'NÃO INFORMADA').toUpperCase());
   curY += hRow;
 
   // 3. DADOS DO CONTRATO (Campos 21 a 32)
@@ -1194,16 +1196,16 @@ function desenharHomologacaoPagina2(
   curY += 4.2;
 
   // Linha 1: 10 PIS / PASEP, 11 Nome
-  desenharCampoTRCT(doc, marginLeft, curY, 55, hRow, '10 PIS / PASEP', empregado.pis);
-  desenharCampoTRCT(doc, marginLeft + 55, curY, 135, hRow, '11 Nome', empregado.nomeCompleto.toUpperCase());
+  desenharCampoTRCT(doc, marginLeft, curY, 55, hRow, '10 PIS / PASEP', empregado.pis || '');
+  desenharCampoTRCT(doc, marginLeft + 55, curY, 135, hRow, '11 Nome', (empregado.nomeCompleto || '').toUpperCase());
   curY += hRow;
 
   // Linha 2: 17 CTPS, 18 CPF, 19 Data de nascimento, 20 Nome da mãe
-  const ctpsStr = `${empregado.ctpsNumero || '00000842279'}/${empregado.ctpsSerie || '00050'} ${empregado.ctpsUF || empregado.endereco.uf}`;
+  const ctpsStr = `${empregado.ctpsNumero || '00000842279'}/${empregado.ctpsSerie || '00050'} ${empregado.ctpsUF || empregado.endereco?.uf || ''}`;
   desenharCampoTRCT(doc, marginLeft, curY, 55, hRow, '17 CTPS (nº, série, UF)', ctpsStr);
   desenharCampoTRCT(doc, marginLeft + 55, curY, 35, hRow, '18 CPF', formatarCPF(empregado.cpf));
   desenharCampoTRCT(doc, marginLeft + 90, curY, 35, hRow, '19 Data de nascimento', formatarData(empregado.dataNascimento));
-  desenharCampoTRCT(doc, marginLeft + 125, curY, 65, hRow, '20 Nome da mãe', (empregado.nomeMae || 'FABRICIANA GARCIA PEREIRA').toUpperCase());
+  desenharCampoTRCT(doc, marginLeft + 125, curY, 65, hRow, '20 Nome da mãe', (empregado.nomeMae || 'NÃO INFORMADA').toUpperCase());
   curY += hRow;
 
   // 3. CONTRATO (Campos 22, 24, 25, 26, 27, 29, 30, 31, 32)
@@ -1456,7 +1458,8 @@ export function desenharContratoExperienciaPagina(
   const serieStr = empregado.ctpsSerie || '00050';
   const matriculaESocial = empregado.matriculaESocial || empregado.cpf || empregado.matricula;
 
-  const textoPreambulo = `Entre a firma ${empresa.razaoSocial} estabelecida em ${empresa.endereco.cidade} à ${empresa.endereco.logradouro}, ${empresa.endereco.numero} CNPJ/CEI ${formatarCNPJ(empresa.cnpj)} doravante designada simplesmente EMPREGADORA e, ${empregado.nomeCompleto} portador da Carteira Profissional No.${ctpsStr} Serie ${serieStr} e matrícula do eSocial ${matriculaESocial} a seguir, chamado apenas de EMPREGADO, é celebrado o presente CONTRATO DE EXPERIÊNCIA, que terá vigência a partir da data de início da prestação de serviços, de acordo com as condições a seguir especificadas:`;
+  const endEmpresaContrato = empresa.endereco || ({} as any);
+  const textoPreambulo = `Entre a firma ${empresa.razaoSocial} estabelecida em ${endEmpresaContrato.cidade || 'São Paulo'} à ${endEmpresaContrato.logradouro || ''}, ${endEmpresaContrato.numero || ''} CNPJ/CEI ${formatarCNPJ(empresa.cnpj)} doravante designada simplesmente EMPREGADORA e, ${empregado.nomeCompleto} portador da Carteira Profissional No.${ctpsStr} Serie ${serieStr} e matrícula do eSocial ${matriculaESocial} a seguir, chamado apenas de EMPREGADO, é celebrado o presente CONTRATO DE EXPERIÊNCIA, que terá vigência a partir da data de início da prestação de serviços, de acordo com as condições a seguir especificadas:`;
 
   const preambuloLinhas = doc.splitTextToSize(textoPreambulo, contentWidth);
   doc.text(preambuloLinhas, marginLeft, curY);
@@ -1487,7 +1490,8 @@ export function desenharContratoExperienciaPagina(
 
   // Local e data de assinatura do contrato
   curY += 2.0;
-  const textoDataContrato = formatarDataPorExtenso(empregado.dataAdmissao, empresa.endereco.cidade);
+  const cidadeContrato = empresa.endereco?.cidade || 'São Paulo';
+  const textoDataContrato = formatarDataPorExtenso(empregado.dataAdmissao || new Date().toISOString().split('T')[0], cidadeContrato);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.text(textoDataContrato, marginLeft, curY);
@@ -1522,13 +1526,13 @@ export function desenharContratoExperienciaPagina(
 
   // Texto da prorrogação
   let dataProrrogadoAte = '__/__/____';
-  let dataAssinaturaProrrogacao = `${empresa.endereco.cidade}, ___ de _________________ de ______`;
+  let dataAssinaturaProrrogacao = `${empresa.endereco?.cidade || 'São Paulo'}, ___ de _________________ de ______`;
 
   if (empregado.dataFimExperiencia2) {
     dataProrrogadoAte = formatarData(empregado.dataFimExperiencia2);
   }
   if (empregado.dataFimExperiencia1) {
-    dataAssinaturaProrrogacao = formatarDataPorExtenso(empregado.dataFimExperiencia1, empresa.endereco.cidade);
+    dataAssinaturaProrrogacao = formatarDataPorExtenso(empregado.dataFimExperiencia1, empresa.endereco?.cidade || 'São Paulo');
   }
 
   const textoProrrogacao = `Por mútuo acordo entre as partes, fica o presente contrato de experiência, que deveria vencer nesta data prorrogado até ${dataProrrogadoAte}.`;
@@ -1614,16 +1618,17 @@ export function desenharRegistroEmpregadoPagina(
   doc.text(`Atividade Econômica:  ${cnaeTexto}`, marginLeft + 110, 27.5);
 
   // Linha 2
-  doc.text(`Endereço:  ${empresa.endereco.logradouro}, ${empresa.endereco.numero}`, marginLeft + 3, 31.8);
+  const endEmpReg = empresa.endereco || ({} as any);
+  doc.text(`Endereço:  ${endEmpReg.logradouro || ''}${endEmpReg.numero ? `, ${endEmpReg.numero}` : ''}`, marginLeft + 3, 31.8);
   doc.text(`Código Município:  ${empresa.codigoMunicipio || '11300'}`, marginLeft + 110, 31.8);
 
   // Linha 3
-  doc.text(`Bairro:  ${empresa.endereco.bairro}`, marginLeft + 3, 36.2);
-  doc.text(`Cidade:  ${empresa.endereco.cidade}`, marginLeft + 70, 36.2);
-  doc.text(`UF:  ${empresa.endereco.uf}`, marginLeft + 110, 36.2);
+  doc.text(`Bairro:  ${endEmpReg.bairro || ''}`, marginLeft + 3, 36.2);
+  doc.text(`Cidade:  ${endEmpReg.cidade || ''}`, marginLeft + 70, 36.2);
+  doc.text(`UF:  ${endEmpReg.uf || ''}`, marginLeft + 110, 36.2);
 
   // Linha 4
-  doc.text(`CEP:  ${formatarCEP(empresa.endereco.cep)}`, marginLeft + 3, 40.5);
+  doc.text(`CEP:  ${formatarCEP(endEmpReg.cep || '')}`, marginLeft + 3, 40.5);
 
   // 3. QUADRO: DADOS PESSOAIS (Y: 44 a 90 mm)
   const wFoto = 28;
@@ -1680,13 +1685,14 @@ export function desenharRegistroEmpregadoPagina(
   doc.text(`Instrução:  ${empregado.grauInstrucao || 'Ensino Médio completo'}`, xDadosPessoais + 3, 72.5);
 
   // Linha 7 (Y: 76.5)
-  doc.text(`Endereço:  ${empregado.endereco.logradouro}, ${empregado.endereco.numero}`, xDadosPessoais + 3, 76.5);
-  doc.text(`Bairro:  ${empregado.endereco.bairro}`, xDadosPessoais + 95, 76.5);
+  const endTrabReg = empregado.endereco || ({} as any);
+  doc.text(`Endereço:  ${endTrabReg.logradouro || ''}${endTrabReg.numero ? `, ${endTrabReg.numero}` : ''}`, xDadosPessoais + 3, 76.5);
+  doc.text(`Bairro:  ${endTrabReg.bairro || ''}`, xDadosPessoais + 95, 76.5);
 
   // Linha 8 (Y: 80.5)
-  doc.text(`Cidade:  ${empregado.endereco.cidade}`, xDadosPessoais + 3, 80.5);
-  doc.text(`UF:  ${empregado.endereco.uf}`, xDadosPessoais + 65, 80.5);
-  doc.text(`CEP:  ${formatarCEP(empregado.endereco.cep)}`, xDadosPessoais + 95, 80.5);
+  doc.text(`Cidade:  ${endTrabReg.cidade || ''}`, xDadosPessoais + 3, 80.5);
+  doc.text(`UF:  ${endTrabReg.uf || ''}`, xDadosPessoais + 65, 80.5);
+  doc.text(`CEP:  ${formatarCEP(endTrabReg.cep || '')}`, xDadosPessoais + 95, 80.5);
 
   // Linha 9 (Y: 84.5)
   doc.text(`Fone:  ${empregado.telefone || ''}`, xDadosPessoais + 3, 84.5);

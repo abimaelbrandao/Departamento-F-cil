@@ -14,6 +14,7 @@ import {
   UserRole,
   StatusCompetencia,
   LancamentoVariavel,
+  RescisaoSimulada,
 } from './types/dp';
 import { api } from './services/api';
 import { formatarMoeda, formatarData, formatarCPF, formatarCompetenciaExtenso } from './utils/formatters';
@@ -25,6 +26,7 @@ import {
   gerarContratoExperienciaPDF,
   gerarRegistroEmpregadoPDF,
   gerarDocumentosAdmissaoConjuntoPDF,
+  gerarTRCTeHomologacaoPDF,
 } from './utils/pdfGenerator';
 import { useTheme } from './utils/theme';
 import { MemoryCalculationModal } from './components/MemoryCalculationModal';
@@ -85,6 +87,8 @@ import {
   UserMinus,
   Eye,
   PlusCircle,
+  RotateCcw,
+  Download,
 } from 'lucide-react';
 
 const EMPRESA_PADRAO: Empresa = {
@@ -189,6 +193,7 @@ export default function App() {
   const [agenda, setAgenda] = useState<ItemAgendaObrigacao[]>([]);
   const [esocialEventos, setEsocialEventos] = useState<ESocialEvento[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoMensalEmpresa[]>([]);
+  const [rescisoes, setRescisoes] = useState<RescisaoSimulada[]>([]);
 
   // Estados de carregamento e feedback
   const [_carregandoGeral, setCarregandoGeral] = useState(true);
@@ -201,6 +206,9 @@ export default function App() {
   const [modalImportarAberto, setModalImportarAberto] = useState(false);
   const [modalNovaAdmissaoAberto, setModalNovaAdmissaoAberto] = useState(false);
   const [modalRescisaoEmpregado, setModalRescisaoEmpregado] = useState<Empregado | null>(null);
+  const [modalCancelarRescisao, setModalCancelarRescisao] = useState<{ empregado: Empregado; rescisao?: RescisaoSimulada } | null>(null);
+  const [motivoCancelamentoRescisao, setMotivoCancelamentoRescisao] = useState('');
+  const [cancelandoRescisao, setCancelandoRescisao] = useState(false);
   const [modalFeriasEmpregado, setModalFeriasEmpregado] = useState<Empregado | null>(null);
   const [modalDocumentosFeriasEmpregado, setModalDocumentosFeriasEmpregado] = useState<{
     empregado: Empregado;
@@ -293,12 +301,13 @@ export default function App() {
       setEsocialEventos([]);
       setMovimentacoes([]);
       setLancamentosVariaveis([]);
+      setRescisoes([]);
       setCarregandoGeral(false);
       return;
     }
     try {
       setCarregandoGeral(true);
-      const [emps, folhaRes, feriasRes, docsRes, afastRes, agendaRes, esocialRes, movRes, lancRes] = await Promise.all([
+      const [emps, folhaRes, feriasRes, docsRes, afastRes, agendaRes, esocialRes, movRes, lancRes, rescRes] = await Promise.all([
         api.getEmpregados(empresaAtivaId),
         api.getFolha(empresaAtivaId, competenciaAtiva),
         api.getFerias(empresaAtivaId),
@@ -308,6 +317,7 @@ export default function App() {
         api.getESocial(empresaAtivaId),
         api.getMovimentacoes(empresaAtivaId, competenciaAtiva),
         api.getLancamentosVariaveis(empresaAtivaId, competenciaAtiva),
+        api.getRescisoes(empresaAtivaId),
       ]);
 
       setEmpregados(emps);
@@ -319,6 +329,7 @@ export default function App() {
       setEsocialEventos(esocialRes);
       setMovimentacoes(movRes);
       setLancamentosVariaveis(lancRes || []);
+      setRescisoes(rescRes || []);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     } finally {
@@ -2311,43 +2322,137 @@ export default function App() {
                 </div>
 
                 <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                  {empregados.filter(e => e.status !== 'desligado').map(emp => (
-                    <div key={emp.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
-                          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                            Matrícula: {emp.matricula}
-                          </span>
-                          {emp.id === 'emp-edenir' && (
-                            <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded">
-                              Modelo Anexo (Suzy Kids)
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
-                          {emp.cargo} · Admissão: {formatarData(emp.dataAdmissao)} · Salário Contratual: {formatarMoeda(emp.salarioBase)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <button
-                          onClick={() => setModalRescisaoEmpregado(emp)}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Gerar TRCT e Homologação
-                        </button>
-                        <button
-                          onClick={() => setModalRescisaoEmpregado(emp)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
-                        >
-                          <Calculator className="w-3.5 h-3.5" />
-                          Simular
-                        </button>
-                      </div>
+                  {empregados.filter(e => e.status !== 'desligado').length === 0 ? (
+                    <div className="py-6 text-center text-slate-500 dark:text-slate-400">
+                      Nenhum colaborador ativo disponível para rescisão nesta empresa.
                     </div>
-                  ))}
+                  ) : (
+                    empregados.filter(e => e.status !== 'desligado').map(emp => (
+                      <div key={emp.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
+                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                              Matrícula: {emp.matricula}
+                            </span>
+                            {emp.id === 'emp-edenir' && (
+                              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded">
+                                Modelo Anexo (Suzy Kids)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
+                            {emp.cargo} · Admissão: {formatarData(emp.dataAdmissao)} · Salário Contratual: {formatarMoeda(emp.salarioBase)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            onClick={() => setModalRescisaoEmpregado(emp)}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Gerar TRCT e Homologação
+                          </button>
+                          <button
+                            onClick={() => setModalRescisaoEmpregado(emp)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            Simular
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
+              </div>
+
+              {/* Rescisões Homologadas / Colaboradores Desligados com opção de Cancelamento */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                      Rescisões Homologadas &amp; Colaboradores Desligados
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Consulte o TRCT emitido ou cancele a rescisão para reativar o vínculo empregatício.
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    {empregados.filter(e => e.status === 'desligado').length} desligado(s)
+                  </span>
+                </div>
+
+                {empregados.filter(e => e.status === 'desligado').length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                    Nenhuma rescisão homologada registrada nesta empresa.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                    {empregados
+                      .filter(e => e.status === 'desligado')
+                      .map(emp => {
+                        const resc = rescisoes.find(r => r.empregadoId === emp.id && r.status !== 'CANCELADA');
+                        return (
+                          <div
+                            key={emp.id}
+                            className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                  Matrícula: {emp.matricula}
+                                </span>
+                                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded">
+                                  Desligado
+                                </span>
+                              </div>
+                              <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
+                                {emp.cargo} · Desligamento: {formatarData(resc?.dataDesligamento || emp.dataDesligamento)}
+                                {resc ? ` · Líquido TRCT: ${formatarMoeda(resc.liquidoRescisao)}` : ''}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                              <button
+                                onClick={() => {
+                                  if (resc) {
+                                    const empAtual = empresaAtiva || EMPRESA_PADRAO;
+                                    const url = gerarTRCTeHomologacaoPDF(resc, empAtual, emp, { returnBlobUrl: true }) as string;
+                                    setPdfPreviewData({
+                                      isOpen: true,
+                                      titulo: `TRCT e Homologação - ${emp.nomeCompleto}`,
+                                      subtitulo: `Matrícula ${emp.matricula} · Desligamento ${formatarData(resc.dataDesligamento)}`,
+                                      pdfUrl: url,
+                                      nomeArquivoDownload: `TRCT_${emp.matricula}_${emp.nomeCompleto.replace(/\s+/g, '_')}.pdf`,
+                                      onBaixarArquivo: () => gerarTRCTeHomologacaoPDF(resc, empAtual, emp),
+                                    });
+                                  } else {
+                                    setModalRescisaoEmpregado(emp);
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-colors"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                Visualizar TRCT
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setMotivoCancelamentoRescisao('');
+                                  setModalCancelarRescisao({ empregado: emp, rescisao: resc });
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-xl text-xs font-bold transition-colors"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                Cancelar Rescisão
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2381,36 +2486,113 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {documentos.map(doc => {
-                        const emp = empregados.find(e => e.id === doc.empregadoId);
+                      {documentos.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 px-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                            Nenhum contrato ou recibo emitido ainda para os colaboradores desta empresa.
+                          </td>
+                        </tr>
+                      ) : (
+                        documentos.map(doc => {
+                          const emp = empregados.find(e => e.id === doc.empregadoId);
+                          const isContratoAdmissao =
+                            doc.tipo === 'CONTRATO_EXPERIENCIA' || doc.tipo === 'CONTRATO_TRABALHO_CLT';
 
-                        return (
-                          <tr key={doc.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                            <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">{doc.titulo}</td>
-                            <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">{emp?.nomeCompleto || '-'}</td>
-                            <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400 tabular-nums">{formatarData(doc.dataEmissao)}</td>
-                            <td className="py-3.5 px-4">
-                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
-                                doc.status === 'RECIBO_ASSINADO'
-                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400'
-                                  : doc.status === 'PAGAMENTO_CONFIRMADO'
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                                  : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
-                              }`}>
-                                {doc.status.replace('_', ' ')}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              <button
-                                onClick={() => setModalDocumentoStatus(doc)}
-                                className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
-                              >
-                                Gerenciar Fase
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                          const abrirDocumentoPDF = (baixarDireto: boolean) => {
+                            if (!emp) return;
+                            const empAtual = empresaAtiva || EMPRESA_PADRAO;
+                            if (isContratoAdmissao) {
+                              if (baixarDireto) {
+                                gerarDocumentosAdmissaoConjuntoPDF(empAtual, emp);
+                              } else {
+                                const url = gerarDocumentosAdmissaoConjuntoPDF(empAtual, emp, {
+                                  returnBlobUrl: true,
+                                }) as string;
+                                setPdfPreviewData({
+                                  isOpen: true,
+                                  titulo: `${doc.titulo} - ${emp.nomeCompleto}`,
+                                  subtitulo: `Matrícula ${emp.matricula} · Contrato e Registro de Empregado`,
+                                  pdfUrl: url,
+                                  nomeArquivoDownload: `Contrato_Admissao_${emp.matricula}_${emp.nomeCompleto.replace(/\s+/g, '_')}.pdf`,
+                                  onBaixarArquivo: () => gerarDocumentosAdmissaoConjuntoPDF(empAtual, emp),
+                                });
+                              }
+                              return;
+                            }
+                            if (doc.tipo === 'TRCT') {
+                              const resc = rescisoes.find(r => r.empregadoId === emp.id && r.status !== 'CANCELADA');
+                              if (resc) {
+                                if (baixarDireto) {
+                                  gerarTRCTeHomologacaoPDF(resc, empAtual, emp);
+                                } else {
+                                  const url = gerarTRCTeHomologacaoPDF(resc, empAtual, emp, {
+                                    returnBlobUrl: true,
+                                  }) as string;
+                                  setPdfPreviewData({
+                                    isOpen: true,
+                                    titulo: `${doc.titulo}`,
+                                    subtitulo: `Matrícula ${emp.matricula} · TRCT & Termo de Homologação`,
+                                    pdfUrl: url,
+                                    nomeArquivoDownload: `TRCT_${emp.matricula}_${emp.nomeCompleto.replace(/\s+/g, '_')}.pdf`,
+                                    onBaixarArquivo: () => gerarTRCTeHomologacaoPDF(resc, empAtual, emp),
+                                  });
+                                }
+                              } else {
+                                setModalRescisaoEmpregado(emp);
+                              }
+                            }
+                          };
+
+                          return (
+                            <tr key={doc.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                              <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">{doc.titulo}</td>
+                              <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">{emp?.nomeCompleto || '-'}</td>
+                              <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400 tabular-nums">{formatarData(doc.dataEmissao)}</td>
+                              <td className="py-3.5 px-4">
+                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                                  doc.status === 'RECIBO_ASSINADO'
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400'
+                                    : doc.status === 'PAGAMENTO_CONFIRMADO'
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                                    : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
+                                }`}>
+                                  {doc.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-center">
+                                <div className="inline-flex items-center justify-center gap-1.5 flex-wrap">
+                                  {emp && (isContratoAdmissao || doc.tipo === 'TRCT') && (
+                                    <>
+                                      <button
+                                        onClick={() => abrirDocumentoPDF(false)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-colors"
+                                        title="Visualizar PDF do documento"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        Visualizar
+                                      </button>
+                                      <button
+                                        onClick={() => abrirDocumentoPDF(true)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                                        title="Baixar PDF"
+                                      >
+                                        <Download className="w-3.5 h-3.5" />
+                                        PDF
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    onClick={() => setModalDocumentoStatus(doc)}
+                                    className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+                                  >
+                                    Gerenciar Fase
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2721,10 +2903,98 @@ export default function App() {
         empregado={modalRescisaoEmpregado}
         empresa={empresaAtiva || EMPRESA_PADRAO}
         onRescisaoConfirmada={() => {
+          const estavaDesligado = modalRescisaoEmpregado?.status === 'desligado';
           carregarDadosCompetencia();
-          mostrarNotificacao('Rescisão confirmada e homologada com sucesso no sistema!', 'sucesso');
+          mostrarNotificacao(
+            estavaDesligado
+              ? 'Rescisão cancelada e vínculo do colaborador reativado com sucesso!'
+              : 'Rescisão confirmada e homologada com sucesso no sistema!',
+            'sucesso'
+          );
         }}
       />
+
+      {/* 4b. Modal de Confirmação de Cancelamento de Rescisão */}
+      {modalCancelarRescisao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-amber-50/70 dark:bg-amber-950/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 rounded-xl">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cancelar Rescisão</h3>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    {modalCancelarRescisao.empregado.nomeCompleto}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalCancelarRescisao(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Ao cancelar a rescisão, o colaborador <strong>{modalCancelarRescisao.empregado.nomeCompleto}</strong> retornará ao status <strong>Ativo</strong> na folha de pagamento e a rescisão ficará marcada como cancelada no histórico.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Motivo do cancelamento (opcional):
+                </label>
+                <input
+                  type="text"
+                  value={motivoCancelamentoRescisao}
+                  onChange={e => setMotivoCancelamentoRescisao(e.target.value)}
+                  placeholder="Ex: Reintegração ou desistência do desligamento"
+                  className="w-full text-xs border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90">
+              <button
+                type="button"
+                onClick={() => setModalCancelarRescisao(null)}
+                disabled={cancelandoRescisao}
+                className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={cancelandoRescisao}
+                onClick={async () => {
+                  try {
+                    setCancelandoRescisao(true);
+                    await api.cancelarRescisao({
+                      empregadoId: modalCancelarRescisao.empregado.id,
+                      rescisaoId: modalCancelarRescisao.rescisao?.id,
+                      motivo: motivoCancelamentoRescisao.trim() || 'Cancelamento solicitado pelo operador do DP',
+                      empregado: modalCancelarRescisao.empregado,
+                    });
+                    setModalCancelarRescisao(null);
+                    await carregarDadosCompetencia();
+                    mostrarNotificacao('Rescisão cancelada e vínculo do colaborador reativado com sucesso!', 'sucesso');
+                  } catch (err: any) {
+                    mostrarNotificacao(err?.message || 'Erro ao cancelar rescisão.', 'erro');
+                  } finally {
+                    setCancelandoRescisao(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-xs disabled:opacity-50"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {cancelandoRescisao ? 'Cancelando...' : 'Confirmar Cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. Modal de Programação de Férias */}
       <VacationPlannerModal

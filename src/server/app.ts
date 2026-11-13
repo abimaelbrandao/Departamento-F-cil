@@ -580,6 +580,24 @@ app.use((req, res, next) => {
         ],
       };
       db.empregados.push(novoEmpregado);
+
+      if (novoEmpregado.status === 'ativo') {
+        const docId = `doc-contrato-${novoEmpregado.id}`;
+        if (!db.documentos.some(d => d.id === docId)) {
+          db.documentos.push({
+            id: docId,
+            empresaId: novoEmpregado.empresaId,
+            empregadoId: novoEmpregado.id,
+            tipo: novoEmpregado.tipoContrato === 'EXPERIENCIA_45_45' ? 'CONTRATO_EXPERIENCIA' : 'CONTRATO_TRABALHO_CLT',
+            titulo: novoEmpregado.tipoContrato === 'EXPERIENCIA_45_45' ? 'Contrato de Experiência (45+45 dias)' : 'Contrato Individual de Trabalho CLT',
+            conteudoHtml: 'Contrato gerado automaticamente na admissão.',
+            dataEmissao: novoEmpregado.dataAdmissao || novoEmpregado.dataPrevisaoInicio || new Date().toISOString().split('T')[0],
+            status: 'EMITIDO',
+            versao: 1,
+          });
+        }
+      }
+
       salvarDB();
       res.status(201).json(novoEmpregado);
     } catch (err: any) {
@@ -1470,56 +1488,199 @@ app.use((req, res, next) => {
     res.json({ success: true, programacao: novaProg, calculo });
   });
 
-  // Rescisão: Simulação e Confirmação
+  // Rescisão: Listagem, Simulação, Confirmação e Cancelamento
+  app.get('/api/rescisoes/:empresaId', (req, res) => {
+    const { empresaId } = req.params;
+    const list = db.rescisoes.filter(r => r.empresaId === empresaId && r.status !== 'CANCELADA');
+    res.json(list);
+  });
+
   app.post('/api/rescisao/simular', (req, res) => {
-    const { empregadoId, motivo, dataDesligamento, tipoAviso, saldoFGTSComprovado, adiantamentoPago } = req.body;
-    const emp = db.empregados.find(e => e.id === empregadoId);
-    if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
+    try {
+      const { empregadoId, motivo, dataDesligamento, tipoAviso, saldoFGTSComprovado, adiantamentoPago, empregado } = req.body || {};
+      let emp = db.empregados.find(e => e.id === empregadoId);
+      if (!emp && empregado && empregado.id === empregadoId) {
+        emp = empregado as Empregado;
+      }
+      if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
 
-    const rescisao = calcularRescisaoCompleta(
-      emp,
-      motivo,
-      dataDesligamento,
-      tipoAviso,
-      Number(saldoFGTSComprovado || 0),
-      Number(adiantamentoPago || 0)
-    );
+      const rescisao = calcularRescisaoCompleta(
+        emp,
+        motivo,
+        dataDesligamento,
+        tipoAviso,
+        Number(saldoFGTSComprovado || 0),
+        Number(adiantamentoPago || 0)
+      );
 
-    res.json(rescisao);
+      res.json(rescisao);
+    } catch (err: any) {
+      console.error('Erro ao simular rescisão:', err);
+      res.status(500).json({ error: err?.message || 'Erro ao calcular simulação de rescisão.' });
+    }
   });
 
   app.post('/api/rescisao/confirmar', (req, res) => {
-    const rescisaoData: RescisaoSimulada = req.body;
-    const emp = db.empregados.find(e => e.id === rescisaoData.empregadoId);
-    if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
+    try {
+      const body = req.body || {};
+      const rescisaoData: RescisaoSimulada = body.rescisao ? body.rescisao : body;
+      let emp = db.empregados.find(e => e.id === rescisaoData.empregadoId);
+      if (!emp && body.empregado && body.empregado.id === rescisaoData.empregadoId) {
+        emp = body.empregado as Empregado;
+        db.empregados.push(emp);
+      }
+      if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
 
-    rescisaoData.status = 'CONFIRMADA';
-    rescisaoData.dataConfirmacao = new Date().toISOString();
+      rescisaoData.status = 'CONFIRMADA';
+      rescisaoData.dataConfirmacao = new Date().toISOString();
 
-    emp.status = 'desligado';
+      emp.status = 'desligado';
+      emp.dataDesligamento = rescisaoData.dataDesligamento;
 
-    // Salva rescisão no histórico
-    db.rescisoes.push(rescisaoData);
+      // Salva ou atualiza rescisão no histórico
+      const idxResc = db.rescisoes.findIndex(r => r.id === rescisaoData.id);
+      if (idxResc >= 0) {
+        db.rescisoes[idxResc] = rescisaoData;
+      } else {
+        db.rescisoes.push(rescisaoData);
+      }
 
-    // Cria evento eSocial S-2299 (Desligamento)
-    const eventoS2299: ESocialEvento = {
-      id: `es-2299-${Date.now()}`,
-      codigoEvento: 'S-2299',
-      descricao: `Desligamento do Trabalhador - ${emp.nomeCompleto}`,
-      empregadoNome: emp.nomeCompleto,
-      statusEnvio: 'GERADO',
-      dataTransmissao: new Date().toISOString(),
-      arquivoXmlSimulado: `<?xml version="1.0" encoding="UTF-8"?><eSocial><evtDeslig><cpfTrab>${emp.cpf}</cpfTrab><dtDeslig>${rescisaoData.dataDesligamento}</dtDeslig><mtvDeslig>${rescisaoData.motivo}</mtvDeslig></evtDeslig></eSocial>`,
-    };
-    db.esocial.unshift(eventoS2299);
+      // Emite documento TRCT no repositório de documentos
+      const trctDocId = `doc-trct-${rescisaoData.id}`;
+      if (!db.documentos.some(d => d.id === trctDocId)) {
+        db.documentos.push({
+          id: trctDocId,
+          empresaId: emp.empresaId,
+          empregadoId: emp.id,
+          tipo: 'TRCT',
+          titulo: `TRCT e Termo de Homologação - ${emp.nomeCompleto}`,
+          conteudoHtml: 'Termo de Rescisão do Contrato de Trabalho gerado na homologação.',
+          dataEmissao: rescisaoData.dataDesligamento,
+          status: 'EMITIDO',
+          versao: 1,
+        });
+      }
 
-    salvarDB();
-    res.json({ success: true, rescisao: rescisaoData, esocial: eventoS2299 });
+      // Cria evento eSocial S-2299 (Desligamento)
+      const eventoS2299: ESocialEvento = {
+        id: `es-2299-${Date.now()}`,
+        codigoEvento: 'S-2299',
+        descricao: `Desligamento do Trabalhador - ${emp.nomeCompleto}`,
+        empregadoNome: emp.nomeCompleto,
+        statusEnvio: 'GERADO',
+        dataTransmissao: new Date().toISOString(),
+        arquivoXmlSimulado: `<?xml version="1.0" encoding="UTF-8"?><eSocial><evtDeslig><cpfTrab>${emp.cpf}</cpfTrab><dtDeslig>${rescisaoData.dataDesligamento}</dtDeslig><mtvDeslig>${rescisaoData.motivo}</mtvDeslig></evtDeslig></eSocial>`,
+      };
+      db.esocial.unshift(eventoS2299);
+
+      salvarDB();
+      res.json({ success: true, rescisao: rescisaoData, empregado: emp, esocial: eventoS2299 });
+    } catch (err: any) {
+      console.error('Erro ao confirmar rescisão:', err);
+      res.status(500).json({ error: err?.message || 'Erro ao confirmar rescisão.' });
+    }
+  });
+
+  app.post('/api/rescisao/cancelar', (req, res) => {
+    try {
+      const { empregadoId, rescisaoId, motivo, empregado } = req.body || {};
+      if (!empregadoId) {
+        return res.status(400).json({ error: 'Empregado é obrigatório para cancelar a rescisão.' });
+      }
+
+      let emp = db.empregados.find(e => e.id === empregadoId);
+      if (!emp && empregado && empregado.id === empregadoId) {
+        emp = empregado as Empregado;
+        db.empregados.push(emp);
+      }
+      if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
+
+      const agora = new Date().toISOString();
+      let canceladas = 0;
+      for (const r of db.rescisoes) {
+        if (r.empregadoId === empregadoId && r.status !== 'CANCELADA' && (!rescisaoId || r.id === rescisaoId)) {
+          r.status = 'CANCELADA';
+          r.dataCancelamento = agora;
+          r.motivoCancelamento = motivo || 'Cancelada pelo operador do DP';
+          canceladas++;
+        }
+      }
+
+      // Reativa o vínculo do colaborador
+      emp.status = 'ativo';
+      delete emp.dataDesligamento;
+      if (!emp.historicoAlteracoes) emp.historicoAlteracoes = [];
+      emp.historicoAlteracoes.push({
+        id: `hist-cancel-resc-${Date.now()}`,
+        dataVigencia: agora.split('T')[0],
+        dataRegistro: agora.split('T')[0],
+        tipo: 'LOTACAO',
+        valorAnterior: 'Desligado',
+        valorNovo: 'Ativo (Rescisão Cancelada)',
+        motivo: motivo || 'Cancelamento de rescisão contratual',
+        responsavel: 'Operador DP',
+      });
+
+      // Remove TRCT associado caso não assinado
+      db.documentos = db.documentos.filter(
+        d => !(d.empregadoId === empregadoId && d.tipo === 'TRCT' && d.status !== 'RECIBO_ASSINADO')
+      );
+
+      db.auditoriaLogs.unshift({
+        id: `log-cancel-resc-${Date.now()}`,
+        dataHora: agora,
+        usuario: 'Operador DP',
+        acao: 'CANCELAMENTO_RESCISAO',
+        detalhes: { empresaId: emp.empresaId, empregadoId, motivo, canceladas },
+      });
+
+      salvarDB();
+      res.json({
+        success: true,
+        empregado: emp,
+        rescisoesCanceladas: canceladas,
+        message: `Rescisão de ${emp.nomeCompleto} cancelada e vínculo reativado com sucesso.`,
+      });
+    } catch (err: any) {
+      console.error('Erro ao cancelar rescisão:', err);
+      res.status(500).json({ error: err?.message || 'Erro ao cancelar rescisão.' });
+    }
   });
 
   // Documentos e Recibos (Emitido -> Pago -> Assinado)
   app.get('/api/documentos/:empresaId', (req, res) => {
-    const list = db.documentos.filter(d => d.empresaId === req.params.empresaId);
+    const empresaId = req.params.empresaId;
+    const ativosEmpresa = db.empregados.filter(
+      e => e.empresaId === empresaId && e.status !== 'em_admissao'
+    );
+    let adicionou = false;
+    for (const emp of ativosEmpresa) {
+      const temContrato = db.documentos.some(
+        d =>
+          d.empregadoId === emp.id &&
+          (d.tipo === 'CONTRATO_EXPERIENCIA' || d.tipo === 'CONTRATO_TRABALHO_CLT')
+      );
+      if (!temContrato) {
+        db.documentos.push({
+          id: `doc-contrato-${emp.id}`,
+          empresaId: emp.empresaId,
+          empregadoId: emp.id,
+          tipo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'CONTRATO_EXPERIENCIA' : 'CONTRATO_TRABALHO_CLT',
+          titulo:
+            emp.tipoContrato === 'EXPERIENCIA_45_45'
+              ? 'Contrato de Experiência (45+45 dias)'
+              : 'Contrato Individual de Trabalho CLT',
+          conteudoHtml: 'Contrato gerado automaticamente na admissão.',
+          dataEmissao: emp.dataAdmissao || emp.dataPrevisaoInicio || new Date().toISOString().split('T')[0],
+          status: 'EMITIDO',
+          versao: 1,
+        });
+        adicionou = true;
+      }
+    }
+    if (adicionou) salvarDB();
+
+    const list = db.documentos.filter(d => d.empresaId === empresaId);
     res.json(list);
   });
 

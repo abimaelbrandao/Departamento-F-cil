@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Empregado, Empresa, RescisaoSimulada, MotivoRescisao } from '../types/dp';
 import { api } from '../services/api';
-import { formatarMoeda, formatarData, formatarValorDecimal } from '../utils/formatters';
-import { gerarTRCTeHomologacaoPDF, gerarTRCTPDF } from '../utils/pdfGenerator';
+import { calcularRescisaoCompleta } from '../services/calculosFeriasRescisao';
+import { formatarMoeda, formatarData } from '../utils/formatters';
+import { gerarTRCTeHomologacaoPDF } from '../utils/pdfGenerator';
 import { PDFPreviewModal } from './PDFPreviewModal';
-import { X, Calculator, FileText, CheckCircle2, AlertTriangle, Download, ArrowRight, ShieldAlert, Printer } from 'lucide-react';
+import { X, Calculator, FileText, CheckCircle2, AlertTriangle, Download, ShieldAlert, RotateCcw } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -38,20 +39,36 @@ export const TerminationSimulatorModal: React.FC<Props> = ({
 
   const [simulacao, setSimulacao] = useState<RescisaoSimulada | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [erroSimulacao, setErroSimulacao] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [confirmandoDialogo, setConfirmandoDialogo] = useState<false | 'CONFIRMAR' | 'CANCELAR'>(false);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
   useEffect(() => {
     if (isOpen && empregado) {
-      // Simulação inicial automática
+      setConfirmandoDialogo(false);
+      setErroSimulacao(null);
+      setMotivoCancelamento('');
+      if (empregado.dataDesligamento) {
+        setDataDesligamento(empregado.dataDesligamento);
+      }
+      setIsMinuta(empregado.status !== 'desligado');
+    }
+  }, [isOpen, empregado?.id]);
+
+  useEffect(() => {
+    if (isOpen && empregado) {
       executarSimulacao();
     }
-  }, [isOpen, empregado, motivo, dataDesligamento, tipoAviso, saldoFGTSComprovado, adiantamentoJaPago]);
+  }, [isOpen, empregado?.id, motivo, dataDesligamento, tipoAviso, saldoFGTSComprovado, adiantamentoJaPago]);
 
   if (!isOpen || !empregado) return null;
 
   const executarSimulacao = async () => {
     try {
       setCarregando(true);
+      setErroSimulacao(null);
       const res = await api.simularRescisao({
         empregadoId: empregado.id,
         motivo,
@@ -59,58 +76,111 @@ export const TerminationSimulatorModal: React.FC<Props> = ({
         tipoAviso,
         saldoFGTSComprovado,
         adiantamentoPago: adiantamentoJaPago,
+        empregado,
       });
       setSimulacao(res);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao simular rescisão:', err);
+      // Contingência imediata client-side caso falhe validação remota
+      try {
+        const localSim = calcularRescisaoCompleta(
+          empregado,
+          motivo,
+          dataDesligamento,
+          tipoAviso,
+          Number(saldoFGTSComprovado || 0),
+          Number(adiantamentoJaPago || 0)
+        );
+        setSimulacao(localSim);
+      } catch (calcErr: any) {
+        setErroSimulacao(err?.message || calcErr?.message || 'Não foi possível calcular a simulação da rescisão.');
+      }
     } finally {
       setCarregando(false);
     }
   };
 
-  const obterSimulacaoAtualizada = (): RescisaoSimulada | null => {
-    if (!simulacao) return null;
+  const obterSimulacaoAtualizada = (): RescisaoSimulada => {
+    const base =
+      simulacao ||
+      calcularRescisaoCompleta(
+        empregado,
+        motivo,
+        dataDesligamento,
+        tipoAviso,
+        Number(saldoFGTSComprovado || 0),
+        Number(adiantamentoJaPago || 0)
+      );
     return {
-      ...simulacao,
+      ...base,
       ressalvas: ressalvas.trim(),
       isMinuta,
     };
   };
 
   const handleGerarTRCTeHomologacao = (abrirPreview: boolean = true) => {
-    const simAtual = obterSimulacaoAtualizada();
-    if (!simAtual) return;
+    try {
+      setErroSimulacao(null);
+      const simAtual = obterSimulacaoAtualizada();
+      if (!simulacao) setSimulacao(simAtual);
 
-    if (abrirPreview) {
-      const url = gerarTRCTeHomologacaoPDF(simAtual, empresa, empregado, { returnBlobUrl: true }) as string;
-      setPreviewBlobUrl(url);
-      setPreviewTitulo(`TRCT e Homologação de Rescisão - ${empregado.nomeCompleto}`);
-      setPreviewModalAberto(true);
-    } else {
-      gerarTRCTeHomologacaoPDF(simAtual, empresa, empregado);
+      if (abrirPreview) {
+        const url = gerarTRCTeHomologacaoPDF(simAtual, empresa, empregado, { returnBlobUrl: true }) as string;
+        if (!url) {
+          setErroSimulacao('Não foi possível gerar a pré-visualização do TRCT.');
+          return;
+        }
+        setPreviewBlobUrl(url);
+        setPreviewTitulo(`TRCT e Homologação de Rescisão - ${empregado.nomeCompleto}`);
+        setPreviewModalAberto(true);
+      } else {
+        gerarTRCTeHomologacaoPDF(simAtual, empresa, empregado);
+      }
+    } catch (err: any) {
+      console.error('Erro ao gerar TRCT e Homologação:', err);
+      setErroSimulacao(err?.message || 'Erro ao gerar o PDF do TRCT e Termo de Homologação.');
     }
   };
 
   const handleConfirmarDesligamento = async () => {
     const simAtual = obterSimulacaoAtualizada();
-    if (!simAtual) return;
-    const confirmou = window.confirm(
-      `Confirma a homologação da rescisão de ${empregado.nomeCompleto}?\n\nApós confirmar, o status do colaborador será atualizado para "Desligado" e os eventos serão integrados no eSocial (S-2299).`
-    );
-    if (!confirmou) return;
 
     try {
       setConfirmando(true);
+      setErroSimulacao(null);
       simAtual.status = 'CONFIRMADA';
       simAtual.isMinuta = false;
-      await api.confirmarRescisao(simAtual);
+      await api.confirmarRescisao(simAtual, empregado);
       setIsMinuta(false);
+      setConfirmandoDialogo(false);
       onRescisaoConfirmada();
       onClose();
     } catch (err: any) {
       console.error('Erro ao confirmar rescisão:', err);
+      setErroSimulacao(err?.message || 'Erro ao confirmar e homologar rescisão.');
     } finally {
       setConfirmando(false);
+    }
+  };
+
+  const handleCancelarRescisao = async () => {
+    try {
+      setCancelando(true);
+      setErroSimulacao(null);
+      await api.cancelarRescisao({
+        empregadoId: empregado.id,
+        rescisaoId: simulacao?.id,
+        motivo: motivoCancelamento.trim() || 'Cancelamento solicitado no simulador de rescisão',
+        empregado,
+      });
+      setConfirmandoDialogo(false);
+      onRescisaoConfirmada();
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao cancelar rescisão:', err);
+      setErroSimulacao(err?.message || 'Erro ao cancelar rescisão.');
+    } finally {
+      setCancelando(false);
     }
   };
 
@@ -217,12 +287,35 @@ export const TerminationSimulatorModal: React.FC<Props> = ({
             </div>
 
             <div className="flex flex-col justify-end">
-              <span className="text-xs text-slate-600 font-medium">Prazo Legal de Pagamento (Art. 477):</span>
-              <span className="text-xs font-bold text-blue-700 mt-1">
-                Até {formatarData(simulacao?.dataLimitePagamento)} (10 dias corridos)
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Prazo Legal de Pagamento (Art. 477):</span>
+              <span className="text-xs font-bold text-blue-700 dark:text-blue-400 mt-1">
+                Até {simulacao?.dataLimitePagamento ? formatarData(simulacao.dataLimitePagamento) : '-'} (10 dias corridos)
               </span>
             </div>
           </div>
+
+          {carregando && !simulacao && (
+            <div className="p-4 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl text-xs font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-2">
+              <Calculator className="w-4 h-4 animate-pulse" />
+              <span>Calculando verbas rescisórias, 13º proporcional, férias e multa do FGTS...</span>
+            </div>
+          )}
+
+          {erroSimulacao && (
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{erroSimulacao}</span>
+              </div>
+              <button
+                type="button"
+                onClick={executarSimulacao}
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shrink-0"
+              >
+                Tentar Novamente
+              </button>
+            </div>
+          )}
 
           {/* Resultado das Verbas Calculadas */}
           {simulacao && (
@@ -448,16 +541,87 @@ export const TerminationSimulatorModal: React.FC<Props> = ({
           )}
         </div>
 
+        {/* Painel de Confirmação em Modal (sem window.confirm) */}
+        {confirmandoDialogo && (
+          <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-amber-50/90 dark:bg-amber-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {confirmandoDialogo === 'CONFIRMAR' ? (
+              <>
+                <div className="text-xs text-amber-950 dark:text-amber-200 space-y-0.5">
+                  <p className="font-bold">
+                    Confirmar homologação da rescisão de {empregado.nomeCompleto}?
+                  </p>
+                  <p className="text-[11px] opacity-90">
+                    O colaborador será marcado como &quot;Desligado&quot; e o evento S-2299 será gerado no eSocial.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoDialogo(false)}
+                    disabled={confirmando}
+                    className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmarDesligamento}
+                    disabled={confirmando}
+                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs disabled:opacity-50"
+                  >
+                    {confirmando ? 'Homologando...' : 'Sim, Confirmar Homologação'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xs text-amber-950 dark:text-amber-200 space-y-1.5 flex-1">
+                  <p className="font-bold">
+                    Cancelar rescisão e reativar vínculo de {empregado.nomeCompleto}?
+                  </p>
+                  <input
+                    type="text"
+                    value={motivoCancelamento}
+                    onChange={e => setMotivoCancelamento(e.target.value)}
+                    placeholder="Motivo do cancelamento (opcional, ex: desistência do desligamento)"
+                    className="w-full text-xs border border-amber-300 dark:border-amber-800 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoDialogo(false)}
+                    disabled={cancelando}
+                    className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelarRescisao}
+                    disabled={cancelando}
+                    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-xs disabled:opacity-50"
+                  >
+                    {cancelando ? 'Cancelando...' : 'Confirmar Cancelamento'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90">
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors"
           >
             Fechar
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={() => handleGerarTRCTeHomologacao(false)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 transition-colors"
               title="Baixar arquivo PDF diretamente no computador"
@@ -466,20 +630,34 @@ export const TerminationSimulatorModal: React.FC<Props> = ({
               Baixar PDF
             </button>
             <button
+              type="button"
               onClick={() => handleGerarTRCTeHomologacao(true)}
               className="flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
             >
               <FileText className="w-4 h-4" />
               Gerar TRCT e Homologação
             </button>
-            <button
-              onClick={handleConfirmarDesligamento}
-              disabled={confirmando}
-              className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              {confirmando ? 'Homologando...' : 'Confirmar e Homologar'}
-            </button>
+            {empregado.status === 'desligado' ? (
+              <button
+                type="button"
+                onClick={() => setConfirmandoDialogo('CANCELAR')}
+                disabled={cancelando}
+                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              >
+                <RotateCcw className="w-4 h-4" />
+                {cancelando ? 'Cancelando...' : 'Cancelar Rescisão'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmandoDialogo('CONFIRMAR')}
+                disabled={confirmando}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {confirmando ? 'Homologando...' : 'Confirmar e Homologar'}
+              </button>
+            )}
           </div>
         </div>
       </div>
