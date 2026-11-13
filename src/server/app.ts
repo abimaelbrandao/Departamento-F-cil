@@ -433,23 +433,25 @@ app.use(express.json({ limit: '10mb' }));
     res.json(empresa);
   });
 
-  // Empresas: Exclusão com proteção de vínculos
+  // Empresas: Exclusão com proteção de vínculos e suporte a exclusão forçada (?force=true)
   app.delete('/api/empresas/:id', (req, res) => {
     const { id } = req.params;
+    const force = req.query.force === 'true';
     const empresa = db.empresas.find(e => e.id === id);
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada.' });
 
     const empsVinculados = db.empregados.filter(e => e.empresaId === id);
-    const folhasVinculadas = db.folhasCalculadas.filter(f => db.empregados.some(e => e.id === f.empregadoId && e.empresaId === id));
+    const empIds = new Set(empsVinculados.map(e => e.id));
+    const folhasVinculadas = db.folhasCalculadas.filter(f => empIds.has(f.empregadoId));
     const feriasVinculadas = db.ferias.filter(f => f.empresaId === id);
     const rescisoesVinculadas = db.rescisoes.filter(r => r.empresaId === id);
 
     const totalVinculos = empsVinculados.length + folhasVinculadas.length + feriasVinculadas.length + rescisoesVinculadas.length;
 
-    if (totalVinculos > 0) {
+    if (totalVinculos > 0 && !force) {
       return res.status(400).json({
-        error: `Não é possível excluir permanentemente a empresa "${empresa.razaoSocial}". Existem registros ativos vinculados no banco de dados.`,
-        motivo: 'Para preservar a integridade fiscal e o histórico trabalhista, você pode inativar a empresa em vez de excluí-la.',
+        error: `A empresa "${empresa.razaoSocial}" possui registros vinculados no banco de dados.`,
+        motivo: 'Você pode inativar a empresa para manter o histórico fiscal ou confirmar a exclusão permanente removendo todos os vínculos.',
         vinculos: {
           colaboradores: empsVinculados.length,
           folhasCalculadas: folhasVinculadas.length,
@@ -457,7 +459,25 @@ app.use(express.json({ limit: '10mb' }));
           rescisoes: rescisoesVinculadas.length,
         },
         podeInativar: true,
+        podeForcar: true,
       });
+    }
+
+    // Remove a empresa e todos os registros vinculados
+    db.lancamentos = db.lancamentos.filter(l => !empIds.has(l.empregadoId));
+    db.folhasCalculadas = db.folhasCalculadas.filter(f => !empIds.has(f.empregadoId));
+    db.empregados = db.empregados.filter(e => e.empresaId !== id);
+    db.ferias = db.ferias.filter(f => f.empresaId !== id);
+    db.rescisoes = db.rescisoes.filter(r => r.empresaId !== id);
+    db.documentos = db.documentos.filter(d => d.empresaId !== id);
+    db.afastamentos = db.afastamentos.filter(a => a.empresaId !== id);
+    db.agenda = db.agenda.filter(a => a.empresaId !== id);
+    db.esocial = db.esocial.filter(e => (e as any).empresaId !== id);
+    db.movimentacoes = db.movimentacoes.filter(m => m.empresaId !== id);
+    for (const key of Object.keys(db.competenciasStatus)) {
+      if (key.startsWith(`${id}_`)) {
+        delete db.competenciasStatus[key];
+      }
     }
 
     db.empresas = db.empresas.filter(e => e.id !== id);

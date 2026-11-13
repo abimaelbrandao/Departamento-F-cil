@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Empresa } from '../types/dp';
 import { api } from '../services/api';
 import { formatarCNPJ, formatarCEP, validarCNPJ } from '../utils/formatters';
@@ -26,7 +26,7 @@ interface Props {
   empresas: Empresa[];
   empresaAtivaId: string;
   onSelecionarEmpresa: (empresaId: string) => void;
-  onEmpresasAtualizadas: () => void;
+  onEmpresasAtualizadas: () => void | Promise<void>;
   abrirCadastroDireto?: boolean;
   onSolicitarCriarColaborador?: (empresa: Empresa) => void;
   onSolicitarCriarCompetencia?: (empresa: Empresa) => void;
@@ -49,6 +49,7 @@ export const CompanyManagementModal: React.FC<Props> = ({
   const [filtroStatus, setFiltroStatus] = useState<'TODAS' | 'ATIVAS' | 'INATIVAS'>('TODAS');
   const [salvando, setSalvando] = useState(false);
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
+  const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
   const [empresaCriadaSucesso, setEmpresaCriadaSucesso] = useState<Empresa | null>(null);
   const [consultandoCNPJ, setConsultandoCNPJ] = useState(false);
   const [avisoCNPJ, setAvisoCNPJ] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export const CompanyManagementModal: React.FC<Props> = ({
     mensagem: string;
     vinculos?: any;
     podeInativar?: boolean;
+    podeForcar?: boolean;
   } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -89,6 +91,22 @@ export const CompanyManagementModal: React.FC<Props> = ({
   const [percentualAdiantamento, setPercentualAdiantamento] = useState(40);
   const [diaVencimentoFGTS, setDiaVencimentoFGTS] = useState(20);
   const [diaVencimentoDCTFWeb, setDiaVencimentoDCTFWeb] = useState(15);
+
+  useEffect(() => {
+    if (isOpen) {
+      setModo(abrirCadastroDireto || empresas.length === 0 ? 'FORM' : 'LISTA');
+      setEmpresaParaExcluir(null);
+      setErroExclusao(null);
+      setMensagemErro(null);
+      setMensagemSucesso(null);
+      setAvisoCNPJ(null);
+      setEmpresaCriadaSucesso(null);
+      if (abrirCadastroDireto) {
+        setEmpresaEmEdicao(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, abrirCadastroDireto]);
 
   if (!isOpen) return null;
 
@@ -271,27 +289,38 @@ export const CompanyManagementModal: React.FC<Props> = ({
 
   const handleToggleStatus = async (emp: Empresa) => {
     try {
+      setMensagemErro(null);
+      setMensagemSucesso(null);
       const novoStatusInativa = emp.status !== 'inativa';
       await api.inativarEmpresa(emp.id, novoStatusInativa);
-      onEmpresasAtualizadas();
+      await onEmpresasAtualizadas();
+      setMensagemSucesso(
+        novoStatusInativa
+          ? `Empresa "${emp.razaoSocial}" inativada com sucesso.`
+          : `Empresa "${emp.razaoSocial}" reativada com sucesso.`
+      );
     } catch (err: any) {
-      alert(err.message || 'Erro ao alterar status da empresa');
+      setMensagemErro(err.message || 'Erro ao alterar status da empresa');
     }
   };
 
-  const handleConfirmarExclusao = async () => {
+  const handleConfirmarExclusao = async (force: boolean = false) => {
     if (!empresaParaExcluir) return;
+    const nomeEmpresa = empresaParaExcluir.razaoSocial;
     try {
       setExcluindo(true);
       setErroExclusao(null);
-      await api.excluirEmpresa(empresaParaExcluir.id);
-      onEmpresasAtualizadas();
+      setMensagemErro(null);
+      const res = await api.excluirEmpresa(empresaParaExcluir.id, force);
+      await onEmpresasAtualizadas();
       setEmpresaParaExcluir(null);
+      setMensagemSucesso(res.message || `Empresa "${nomeEmpresa}" excluída com sucesso.`);
     } catch (err: any) {
       setErroExclusao({
         mensagem: err.message,
         vinculos: err.vinculos,
         podeInativar: err.podeInativar,
+        podeForcar: err.podeForcar,
       });
     } finally {
       setExcluindo(false);
@@ -420,6 +449,29 @@ export const CompanyManagementModal: React.FC<Props> = ({
           {/* MODO LISTAGEM */}
           {modo === 'LISTA' && (
             <div className="space-y-4">
+              {mensagemSucesso && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{mensagemSucesso}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMensagemSucesso(null)}
+                    className="text-emerald-700 dark:text-emerald-300 hover:opacity-75"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {mensagemErro && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-900 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{mensagemErro}</span>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1016,24 +1068,46 @@ export const CompanyManagementModal: React.FC<Props> = ({
                     {erroExclusao.vinculos.periodosFerias > 0 && (
                       <li>{erroExclusao.vinculos.periodosFerias} período(s) de férias registrado(s)</li>
                     )}
+                    {erroExclusao.vinculos.rescisoes > 0 && (
+                      <li>{erroExclusao.vinculos.rescisoes} rescisão(ões) registrada(s)</li>
+                    )}
                   </ul>
                 )}
-                {erroExclusao.podeInativar && (
-                  <div className="pt-2 border-t border-amber-200 dark:border-amber-800 flex justify-end">
+                <div className="pt-2 border-t border-amber-200 dark:border-amber-800 flex flex-wrap items-center justify-end gap-2">
+                  {erroExclusao.podeInativar && (
                     <button
                       type="button"
+                      disabled={excluindo}
                       onClick={async () => {
-                        await api.inativarEmpresa(empresaParaExcluir.id, true);
-                        onEmpresasAtualizadas();
-                        setEmpresaParaExcluir(null);
-                        setErroExclusao(null);
+                        try {
+                          setExcluindo(true);
+                          await api.inativarEmpresa(empresaParaExcluir.id, true);
+                          await onEmpresasAtualizadas();
+                          setMensagemSucesso(`Empresa "${empresaParaExcluir.razaoSocial}" inativada com sucesso.`);
+                          setEmpresaParaExcluir(null);
+                          setErroExclusao(null);
+                        } catch (err: any) {
+                          setErroExclusao({ mensagem: err.message || 'Erro ao inativar empresa' });
+                        } finally {
+                          setExcluindo(false);
+                        }
                       }}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors"
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                     >
-                      Inativar Empresa em vez de Excluir
+                      Inativar Empresa
                     </button>
-                  </div>
-                )}
+                  )}
+                  {erroExclusao.podeForcar && (
+                    <button
+                      type="button"
+                      disabled={excluindo}
+                      onClick={() => handleConfirmarExclusao(true)}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      {excluindo ? 'Excluindo...' : 'Excluir Mesmo Assim (Apagar Vínculos)'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1048,14 +1122,16 @@ export const CompanyManagementModal: React.FC<Props> = ({
               >
                 Cancelar
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmarExclusao}
-                disabled={excluindo}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
-              >
-                {excluindo ? 'Verificando e Excluindo...' : 'Confirmar Exclusão'}
-              </button>
+              {!erroExclusao?.podeForcar && (
+                <button
+                  type="button"
+                  onClick={() => handleConfirmarExclusao(false)}
+                  disabled={excluindo}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  {excluindo ? 'Verificando e Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              )}
             </div>
           </div>
         </div>

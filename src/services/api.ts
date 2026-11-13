@@ -86,6 +86,7 @@ async function requestJson<T>(
         error.status = res.status;
         error.vinculos = errPayload.vinculos;
         error.podeInativar = errPayload.podeInativar;
+        error.podeForcar = errPayload.podeForcar;
         error.sugestao = errPayload.sugestao;
         error.podeDesligar = errPayload.podeDesligar;
         throw error;
@@ -357,10 +358,10 @@ export const api = {
     }
   },
 
-  async excluirEmpresa(id: string): Promise<{ success: boolean; message: string }> {
+  async excluirEmpresa(id: string, force: boolean = false): Promise<{ success: boolean; message: string }> {
     try {
       const res = await requestJson<{ success: boolean; message: string }>(
-        `/api/empresas/${id}`,
+        `/api/empresas/${id}${force ? '?force=true' : ''}`,
         { method: 'DELETE' },
         'excluir empresa'
       );
@@ -368,7 +369,7 @@ export const api = {
       setEmpresasCache(cache);
       return res;
     } catch (err: any) {
-      if (err.isNotFound || err.status === 404) {
+      if (err.isNotFound || err.isHtmlResponse || err.status === 404) {
         const cache = getEmpresasCache().filter(e => e.id !== id);
         setEmpresasCache(cache);
         return { success: true, message: 'Empresa removida com sucesso do armazenamento.' };
