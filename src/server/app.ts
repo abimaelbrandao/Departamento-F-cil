@@ -339,7 +339,28 @@ function recalcularCompetenciaInterna(empresaId: string, competencia: string, em
 }
 
 export const app = express();
-app.use(express.json({ limit: '10mb' }));
+const jsonBodyParser = express.json({ limit: '10mb' });
+app.use((req, res, next) => {
+  if ((req as any)._body) return next();
+  if (req.body !== undefined) {
+    if (typeof req.body === 'string') {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        // mantém como string se não for JSON
+      }
+    } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(req.body)) {
+      try {
+        req.body = JSON.parse(req.body.toString('utf-8'));
+      } catch {
+        // mantém buffer
+      }
+    }
+    (req as any)._body = true;
+    return next();
+  }
+  return jsonBodyParser(req, res, next);
+});
 
   // API Routes
   app.get('/api/status', (_req, res) => {
@@ -519,46 +540,52 @@ app.use(express.json({ limit: '10mb' }));
 
   // Empregados: Cadastro
   app.post('/api/empregados', (req, res) => {
-    const { cpf, empresaId, nomeCompleto } = req.body;
-    if (!nomeCompleto || !nomeCompleto.trim()) {
-      return res.status(400).json({ error: 'Nome completo é obrigatório.' });
-    }
-    if (!empresaId) {
-      return res.status(400).json({ error: 'Empresa vinculada é obrigatória.' });
-    }
-
-    const cpfLimpo = cpf ? cpf.replace(/\D/g, '') : '';
-    if (cpfLimpo && !validarCPF(cpfLimpo)) {
-      return res.status(400).json({ error: 'CPF informado é inválido.' });
-    }
-
-    // Verifica se já existe colaborador com mesma matrícula ou CPF na mesma empresa
-    if (cpfLimpo) {
-      const duplicado = db.empregados.some(
-        e => e.empresaId === empresaId && e.cpf.replace(/\D/g, '') === cpfLimpo && e.status !== 'desligado'
-      );
-      if (duplicado) {
-        return res.status(409).json({ error: 'Já existe um colaborador ativo cadastrado com este CPF nesta empresa.' });
+    try {
+      const body = req.body || {};
+      const { cpf, empresaId, nomeCompleto } = body;
+      if (!nomeCompleto || !String(nomeCompleto).trim()) {
+        return res.status(400).json({ error: 'Nome completo é obrigatório.' });
       }
-    }
+      if (!empresaId) {
+        return res.status(400).json({ error: 'Empresa vinculada é obrigatória.' });
+      }
 
-    const novoEmpregado: Empregado = {
-      ...req.body,
-      id: `emp-${Date.now()}`,
-      matricula: req.body.matricula || String(db.empregados.filter(e => e.empresaId === empresaId).length + 101).padStart(5, '0'),
-      cpf: cpfLimpo || req.body.cpf,
-      historicoAlteracoes: [],
-      documentosAdmissao: req.body.documentosAdmissao || [
-        { id: `doc-1`, nome: 'Documento de Identidade (RG/CNH)', tipo: 'RG', obrigatorio: true, recebido: false, status: 'pendente' },
-        { id: `doc-2`, nome: 'Cadastro de Pessoa Física (CPF)', tipo: 'CPF', obrigatorio: true, recebido: false, status: 'pendente' },
-        { id: `doc-3`, nome: 'Comprovante de Residência', tipo: 'COMPROVANTE_RESIDENCIA', obrigatorio: true, recebido: false, status: 'pendente' },
-        { id: `doc-4`, nome: 'Atestado de Saúde Ocupacional (ASO)', tipo: 'EXAME_ADMISSIONAL_ASO', obrigatorio: true, recebido: false, status: 'pendente' },
-        { id: `doc-5`, nome: 'Carteira de Trabalho Digital', tipo: 'CTPS', obrigatorio: true, recebido: false, status: 'pendente' },
-      ],
-    };
-    db.empregados.push(novoEmpregado);
-    salvarDB();
-    res.status(201).json(novoEmpregado);
+      const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : '';
+      if (cpfLimpo && !validarCPF(cpfLimpo)) {
+        return res.status(400).json({ error: 'CPF informado é inválido.' });
+      }
+
+      // Verifica se já existe colaborador com mesma matrícula ou CPF na mesma empresa
+      if (cpfLimpo) {
+        const duplicado = db.empregados.some(
+          e => e.empresaId === empresaId && (e.cpf || '').replace(/\D/g, '') === cpfLimpo && e.status !== 'desligado'
+        );
+        if (duplicado) {
+          return res.status(409).json({ error: 'Já existe um colaborador ativo cadastrado com este CPF nesta empresa.' });
+        }
+      }
+
+      const novoEmpregado: Empregado = {
+        ...body,
+        id: body.id || `emp-${Date.now()}`,
+        matricula: body.matricula || String(db.empregados.filter(e => e.empresaId === empresaId).length + 101).padStart(5, '0'),
+        cpf: cpfLimpo || body.cpf || '',
+        historicoAlteracoes: Array.isArray(body.historicoAlteracoes) ? body.historicoAlteracoes : [],
+        documentosAdmissao: body.documentosAdmissao || [
+          { id: `doc-1`, nome: 'Documento de Identidade (RG/CNH)', tipo: 'RG', obrigatorio: true, recebido: false, status: 'pendente' },
+          { id: `doc-2`, nome: 'Cadastro de Pessoa Física (CPF)', tipo: 'CPF', obrigatorio: true, recebido: false, status: 'pendente' },
+          { id: `doc-3`, nome: 'Comprovante de Residência', tipo: 'COMPROVANTE_RESIDENCIA', obrigatorio: true, recebido: false, status: 'pendente' },
+          { id: `doc-4`, nome: 'Atestado de Saúde Ocupacional (ASO)', tipo: 'EXAME_ADMISSIONAL_ASO', obrigatorio: true, recebido: false, status: 'pendente' },
+          { id: `doc-5`, nome: 'Carteira de Trabalho Digital', tipo: 'CTPS', obrigatorio: true, recebido: false, status: 'pendente' },
+        ],
+      };
+      db.empregados.push(novoEmpregado);
+      salvarDB();
+      res.status(201).json(novoEmpregado);
+    } catch (err: any) {
+      console.error('Erro ao cadastrar empregado:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao cadastrar colaborador.' });
+    }
   });
 
   // Empregados: Edição cadastral
@@ -684,25 +711,33 @@ app.use(express.json({ limit: '10mb' }));
 
   // Aprova admissão e integra na folha
   app.post('/api/empregados/:id/aprovar-admissao', (req, res) => {
-    const emp = db.empregados.find(e => e.id === req.params.id);
+    let emp = db.empregados.find(e => e.id === req.params.id);
+    if (!emp && req.body?.empregado && req.body.empregado.id === req.params.id) {
+      emp = req.body.empregado as Empregado;
+      db.empregados.push(emp);
+    }
     if (!emp) return res.status(404).json({ error: 'Empregado não encontrado' });
 
     emp.status = 'ativo';
-    emp.dataAdmissao = emp.dataPrevisaoInicio || new Date().toISOString().split('T')[0];
+    emp.dataAdmissao = emp.dataPrevisaoInicio || emp.dataAdmissao || new Date().toISOString().split('T')[0];
 
-    // Gera o contrato de trabalho
-    const novoDoc: ContratoDocumento = {
-      id: `doc-contrato-${emp.id}`,
-      empresaId: emp.empresaId,
-      empregadoId: emp.id,
-      tipo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'CONTRATO_EXPERIENCIA' : 'CONTRATO_TRABALHO_CLT',
-      titulo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'Contrato de Experiência (45+45 dias)' : 'Contrato Individual de Trabalho CLT',
-      conteudoHtml: 'Contrato gerado automaticamente na admissão.',
-      dataEmissao: emp.dataAdmissao,
-      status: 'EMITIDO',
-      versao: 1,
-    };
-    db.documentos.push(novoDoc);
+    // Gera o contrato de trabalho (idempotente)
+    const docId = `doc-contrato-${emp.id}`;
+    let novoDoc = db.documentos.find(d => d.id === docId);
+    if (!novoDoc) {
+      novoDoc = {
+        id: docId,
+        empresaId: emp.empresaId,
+        empregadoId: emp.id,
+        tipo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'CONTRATO_EXPERIENCIA' : 'CONTRATO_TRABALHO_CLT',
+        titulo: emp.tipoContrato === 'EXPERIENCIA_45_45' ? 'Contrato de Experiência (45+45 dias)' : 'Contrato Individual de Trabalho CLT',
+        conteudoHtml: 'Contrato gerado automaticamente na admissão.',
+        dataEmissao: emp.dataAdmissao,
+        status: 'EMITIDO',
+        versao: 1,
+      };
+      db.documentos.push(novoDoc);
+    }
 
     // Registra evento eSocial S-2200
     const novoESocial: ESocialEvento = {

@@ -1,5 +1,6 @@
 import { Empresa, Empregado, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from '../types/dp';
-import { EMPRESAS_INICIAIS } from '../data/initialData';
+import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS } from '../data/initialData';
+import { validarCPF } from '../utils/formatters';
 
 // URL base configurável via variável de ambiente VITE_API_URL (aceita apenas URLs HTTP/HTTPS válidas)
 const rawApiUrl = (
@@ -74,6 +75,73 @@ function setEmpresasCache(empresas: Empresa[]) {
     }
   } catch (e) {
     console.warn('Erro ao gravar cache local de empresas:', e);
+  }
+}
+
+const CACHE_EMPREGADOS_KEY = 'dp_facil_empregados_cache_v1';
+const CACHE_DELETED_EMPREGADOS_KEY = 'dp_facil_empregados_deleted_v1';
+
+function getDeletedEmpregadosIds(): Set<string> {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(CACHE_DELETED_EMPREGADOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    // ignora
+  }
+  return new Set();
+}
+
+function markEmpregadoDeletedLocal(id: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const ids = getDeletedEmpregadosIds();
+    ids.add(id);
+    localStorage.setItem(CACHE_DELETED_EMPREGADOS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignora
+  }
+}
+
+function unmarkEmpregadoDeletedLocal(id: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const ids = getDeletedEmpregadosIds();
+    if (ids.delete(id)) {
+      localStorage.setItem(CACHE_DELETED_EMPREGADOS_KEY, JSON.stringify(Array.from(ids)));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function getEmpregadosCache(): Empregado[] {
+  const deleted = getDeletedEmpregadosIds();
+  try {
+    if (typeof window === 'undefined') return EMPREGADOS_INICIAIS;
+    const item = localStorage.getItem(CACHE_EMPREGADOS_KEY);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((e: Empregado) => !deleted.has(e.id));
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao ler cache local de colaboradores:', e);
+  }
+  return EMPREGADOS_INICIAIS.filter(e => !deleted.has(e.id));
+}
+
+function setEmpregadosCache(empregados: Empregado[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_EMPREGADOS_KEY, JSON.stringify(empregados));
+    }
+  } catch (e) {
+    console.warn('Erro ao gravar cache local de colaboradores:', e);
   }
 }
 
@@ -199,6 +267,7 @@ async function requestJson<T>(
         `Resposta inesperada do servidor (HTML em vez de JSON ao ${actionDescription}). O endpoint "${url}" não está roteando para o backend.`
       ) as any;
       err.isHtmlResponse = true;
+      err.isBackendUnavailable = true;
       throw err;
     }
     throw new Error(
@@ -459,67 +528,251 @@ export const api = {
   },
 
   async getEmpregados(empresaId?: string): Promise<Empregado[]> {
-    const url = empresaId ? `/api/empregados?empresaId=${empresaId}` : '/api/empregados';
+    const url = empresaId ? `/api/empregados?empresaId=${encodeURIComponent(empresaId)}` : '/api/empregados';
+    const deleted = getDeletedEmpregadosIds();
+    const cacheAtual = getEmpregadosCache();
     try {
-      return await requestJson<Empregado[]>(url, undefined, 'listar colaboradores');
-    } catch (err) {
-      console.warn('Erro ao carregar colaboradores do servidor:', err);
-      return [];
+      const remotos = await requestJson<Empregado[]>(url, undefined, 'listar colaboradores');
+      if (Array.isArray(remotos)) {
+        const remotosFiltrados = remotos.filter(e => !deleted.has(e.id));
+        const idsRemotos = new Set(remotosFiltrados.map(e => e.id));
+        // Preserva colaboradores gravados em contingência local ainda não presentes no backend efêmero
+        const locaisExtras = cacheAtual.filter(
+          e => (!empresaId || e.empresaId === empresaId) && e.id.startsWith('emp-local-') && !idsRemotos.has(e.id)
+        );
+        const combinados = [...remotosFiltrados, ...locaisExtras];
+
+        // Atualiza cache completo mantendo registros de outras empresas intactos
+        const outrasEmpresas = empresaId ? cacheAtual.filter(e => e.empresaId !== empresaId) : [];
+        setEmpregadosCache([...outrasEmpresas, ...combinados]);
+        return combinados;
+      }
+    } catch (err: any) {
+      console.warn('[Departamento Fácil] Erro ao carregar colaboradores do servidor, usando cache local:', err.message);
     }
+    return empresaId ? cacheAtual.filter(e => e.empresaId === empresaId) : cacheAtual;
   },
 
   async salvarEmpregado(empregado: Partial<Empregado>): Promise<Empregado> {
+    const nome = (empregado.nomeCompleto || '').trim();
+    if (!nome) {
+      throw new Error('Nome completo é obrigatório.');
+    }
+    if (!empregado.id && !empregado.empresaId) {
+      throw new Error('Empresa vinculada é obrigatória.');
+    }
+
+    const cpfLimpo = (empregado.cpf || '').replace(/\D/g, '');
+    if (cpfLimpo && !validarCPF(cpfLimpo)) {
+      throw new Error('CPF informado é inválido.');
+    }
+
+    const cacheAtual = getEmpregadosCache();
+    const empresaTargetId = empregado.empresaId || cacheAtual.find(e => e.id === empregado.id)?.empresaId || '';
+    if (cpfLimpo && empresaTargetId) {
+      const duplicado = cacheAtual.some(
+        e =>
+          e.id !== empregado.id &&
+          e.empresaId === empresaTargetId &&
+          (e.cpf || '').replace(/\D/g, '') === cpfLimpo &&
+          e.status !== 'desligado'
+      );
+      if (duplicado) {
+        throw new Error('Já existe um colaborador ativo cadastrado com este CPF nesta empresa.');
+      }
+    }
+
     const method = empregado.id ? 'PUT' : 'POST';
     const url = empregado.id ? `/api/empregados/${empregado.id}` : '/api/empregados';
-    return requestJson<Empregado>(
-      url,
-      {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(empregado),
-      },
-      'salvar colaborador'
-    );
+
+    try {
+      const salvo = await requestJson<Empregado>(
+        url,
+        {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(empregado),
+        },
+        'salvar colaborador'
+      );
+
+      unmarkEmpregadoDeletedLocal(salvo.id);
+      const atualizado = empregado.id
+        ? cacheAtual.map(e => (e.id === salvo.id ? salvo : e))
+        : [...cacheAtual, salvo];
+      setEmpregadosCache(atualizado);
+      return salvo;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        console.warn('[Departamento Fácil] Backend indisponível ao salvar colaborador. Gravando no armazenamento local.');
+        const existente = empregado.id ? cacheAtual.find(e => e.id === empregado.id) : undefined;
+        const novoOuAtualizado: Empregado = {
+          ...(existente || ({} as Empregado)),
+          ...(empregado as Empregado),
+          id: empregado.id || `emp-local-${Date.now()}`,
+          empresaId: empresaTargetId,
+          nomeCompleto: nome,
+          cpf: cpfLimpo || empregado.cpf || existente?.cpf || '',
+          matricula:
+            empregado.matricula ||
+            existente?.matricula ||
+            String(cacheAtual.filter(e => e.empresaId === empresaTargetId).length + 101).padStart(5, '0'),
+          historicoAlteracoes: empregado.historicoAlteracoes || existente?.historicoAlteracoes || [],
+          documentosAdmissao:
+            empregado.documentosAdmissao ||
+            existente?.documentosAdmissao || [
+              { id: 'doc-1', nome: 'Documento de Identidade (RG/CNH)', tipo: 'RG', obrigatorio: true, recebido: false, status: 'pendente' },
+              { id: 'doc-2', nome: 'Cadastro de Pessoa Física (CPF)', tipo: 'CPF', obrigatorio: true, recebido: false, status: 'pendente' },
+              { id: 'doc-3', nome: 'Comprovante de Residência', tipo: 'COMPROVANTE_RESIDENCIA', obrigatorio: true, recebido: false, status: 'pendente' },
+              { id: 'doc-4', nome: 'Atestado de Saúde Ocupacional (ASO)', tipo: 'EXAME_ADMISSIONAL_ASO', obrigatorio: true, recebido: false, status: 'pendente' },
+              { id: 'doc-5', nome: 'Carteira de Trabalho Digital', tipo: 'CTPS', obrigatorio: true, recebido: false, status: 'pendente' },
+            ],
+        };
+
+        unmarkEmpregadoDeletedLocal(novoOuAtualizado.id);
+        const atualizado = existente
+          ? cacheAtual.map(e => (e.id === novoOuAtualizado.id ? novoOuAtualizado : e))
+          : [...cacheAtual, novoOuAtualizado];
+        setEmpregadosCache(atualizado);
+        return novoOuAtualizado;
+      }
+
+      throw err;
+    }
   },
 
   async registrarAlteracaoEmpregado(id: string, dados: { tipo: string; valorNovo: any; dataVigencia: string; motivo: string; responsavel: string }) {
-    return requestJson(
-      `/api/empregados/${id}/alteracao`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'registrar alteração contratual'
-    );
+    try {
+      const res: any = await requestJson(
+        `/api/empregados/${id}/alteracao`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'registrar alteração contratual'
+      );
+      if (res?.empregado) {
+        const cache = getEmpregadosCache().map(e => (e.id === id ? res.empregado : e));
+        setEmpregadosCache(cache);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const cache = getEmpregadosCache();
+        const emp = cache.find(e => e.id === id);
+        if (emp) {
+          let valorAnterior: any = '';
+          if (dados.tipo === 'SALARIO') {
+            valorAnterior = emp.salarioBase;
+            emp.salarioBase = Number(dados.valorNovo);
+          } else if (dados.tipo === 'CARGO') {
+            valorAnterior = emp.cargo;
+            emp.cargo = String(dados.valorNovo);
+          } else if (dados.tipo === 'JORNADA') {
+            valorAnterior = emp.escala;
+            emp.escala = String(dados.valorNovo);
+          }
+          const reg = {
+            id: `hist-${Date.now()}`,
+            dataVigencia: dados.dataVigencia,
+            dataRegistro: new Date().toISOString().split('T')[0],
+            tipo: dados.tipo as any,
+            valorAnterior,
+            valorNovo: dados.valorNovo,
+            motivo: dados.motivo,
+            responsavel: dados.responsavel || 'Operador DP',
+          };
+          emp.historicoAlteracoes = [...(emp.historicoAlteracoes || []), reg];
+          setEmpregadosCache([...cache]);
+          return { empregado: emp, alteracao: reg };
+        }
+      }
+      throw err;
+    }
   },
 
-  async aprovarAdmissao(id: string) {
-    return requestJson(
-      `/api/empregados/${id}/aprovar-admissao`,
-      { method: 'POST' },
-      'aprovar admissão'
-    );
+  async aprovarAdmissao(id: string, empregadoFallback?: Empregado) {
+    try {
+      const res: any = await requestJson(
+        `/api/empregados/${id}/aprovar-admissao`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(empregadoFallback ? { empregado: empregadoFallback } : {}),
+        },
+        'aprovar admissão'
+      );
+      if (res?.empregado) {
+        const cache = getEmpregadosCache();
+        const exists = cache.some(e => e.id === id);
+        setEmpregadosCache(exists ? cache.map(e => (e.id === id ? res.empregado : e)) : [...cache, res.empregado]);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const cache = getEmpregadosCache();
+        const emp = cache.find(e => e.id === id) || empregadoFallback;
+        if (emp) {
+          emp.status = 'ativo';
+          emp.dataAdmissao = emp.dataPrevisaoInicio || emp.dataAdmissao || new Date().toISOString().split('T')[0];
+          const exists = cache.some(e => e.id === emp.id);
+          setEmpregadosCache(exists ? cache.map(e => (e.id === emp.id ? emp : e)) : [...cache, emp]);
+          return { success: true, empregado: emp };
+        }
+      }
+      throw err;
+    }
   },
 
   async excluirEmpregado(id: string): Promise<{ success: boolean; message: string }> {
-    return requestJson<{ success: boolean; message: string }>(
-      `/api/empregados/${id}`,
-      { method: 'DELETE' },
-      'excluir colaborador'
-    );
+    try {
+      const res = await requestJson<{ success: boolean; message: string }>(
+        `/api/empregados/${id}`,
+        { method: 'DELETE' },
+        'excluir colaborador'
+      );
+      markEmpregadoDeletedLocal(id);
+      setEmpregadosCache(getEmpregadosCache().filter(e => e.id !== id));
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        markEmpregadoDeletedLocal(id);
+        setEmpregadosCache(getEmpregadosCache().filter(e => e.id !== id));
+        return { success: true, message: 'Colaborador excluído com sucesso do armazenamento.' };
+      }
+      throw err;
+    }
   },
 
   async registrarDesligamento(id: string, dados: { dataDesligamento: string; motivo: string; observacoes?: string }) {
-    return requestJson(
-      `/api/empregados/${id}/desligamento`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'registrar desligamento'
-    );
+    try {
+      const res: any = await requestJson(
+        `/api/empregados/${id}/desligamento`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'registrar desligamento'
+      );
+      if (res?.empregado) {
+        setEmpregadosCache(getEmpregadosCache().map(e => (e.id === id ? res.empregado : e)));
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const cache = getEmpregadosCache();
+        const emp = cache.find(e => e.id === id);
+        if (emp) {
+          emp.status = 'desligado';
+          emp.dataDesligamento = dados.dataDesligamento || new Date().toISOString().split('T')[0];
+          setEmpregadosCache([...cache]);
+          return { success: true, empregado: emp };
+        }
+      }
+      throw err;
+    }
   },
 
   async getFolha(empresaId: string, competencia: string): Promise<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }> {

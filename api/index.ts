@@ -16,6 +16,23 @@ export default function handler(req: any, res: any) {
       req.url = `/api${rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`}`;
     }
 
+    if (req.body !== undefined && req._body === undefined) {
+      if (typeof req.body === 'string') {
+        try {
+          req.body = JSON.parse(req.body);
+        } catch {
+          // Mantém string se não for JSON válido
+        }
+      } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(req.body)) {
+        try {
+          req.body = JSON.parse(req.body.toString('utf-8'));
+        } catch {
+          // Mantém buffer se não for JSON válido
+        }
+      }
+      req._body = true;
+    }
+
     return app(req, res);
   } catch (err: any) {
     console.error('[Vercel API Handler Error]:', err);

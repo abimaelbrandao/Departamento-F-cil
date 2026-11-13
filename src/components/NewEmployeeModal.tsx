@@ -3,6 +3,7 @@ import { Empregado, Empresa, VinculoEmpregaticio } from '../types/dp';
 import { api } from '../services/api';
 import { X, UserPlus, CheckCircle2, FileText, UserCheck } from 'lucide-react';
 import { gerarContratoTrabalhoPDF, gerarDocumentosAdmissaoConjuntoPDF } from '../utils/pdfGenerator';
+import { validarCPF } from '../utils/formatters';
 
 interface Props {
   isOpen: boolean;
@@ -86,8 +87,14 @@ export const NewEmployeeModal: React.FC<Props> = ({
 
   const handleSalvarEAdmitir = async (aprovarDiretamente: boolean) => {
     setErroValidacao(null);
-    if (!nomeCompleto || !cpf) {
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    if (!nomeCompleto.trim() || !cpfLimpo) {
       setErroValidacao('Nome completo e CPF são campos obrigatórios.');
+      setEtapa('DADOS_PESSOAIS');
+      return;
+    }
+    if (!validarCPF(cpfLimpo)) {
+      setErroValidacao('O CPF informado é inválido. Verifique os 11 dígitos.');
       setEtapa('DADOS_PESSOAIS');
       return;
     }
@@ -168,15 +175,24 @@ export const NewEmployeeModal: React.FC<Props> = ({
       const salvo = await api.salvarEmpregado(novoEmp);
 
       if (aprovarDiretamente) {
-        await api.aprovarAdmissao(salvo.id);
+        await api.aprovarAdmissao(salvo.id, salvo);
         // Gera automaticamente o conjunto de documentos de admissão em PDF (Contrato + Registro)
-        gerarDocumentosAdmissaoConjuntoPDF(empresa, salvo);
+        try {
+          gerarDocumentosAdmissaoConjuntoPDF(empresa, salvo);
+        } catch (pdfErr) {
+          console.warn('Aviso ao gerar PDF de admissão:', pdfErr);
+        }
       }
 
       onEmpregadoCriado(salvo);
       onClose();
     } catch (err: any) {
-      setErroValidacao(err.message || 'Erro ao registrar empregado');
+      const rawMsg = err?.message;
+      const msgSegura =
+        typeof rawMsg === 'string' && rawMsg.trim() && rawMsg !== '[object Object]'
+          ? rawMsg
+          : 'Erro ao registrar empregado. Verifique os dados informados.';
+      setErroValidacao(msgSegura);
     } finally {
       setCarregando(false);
     }

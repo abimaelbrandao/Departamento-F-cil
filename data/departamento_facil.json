@@ -2656,6 +2656,15 @@
   ],
   "esocial": [
     {
+      "id": "es-1794586601687",
+      "codigoEvento": "S-2200",
+      "descricao": "Cadastramento Inicial e Admissão - Teste Admissao Local",
+      "empregadoNome": "Teste Admissao Local",
+      "statusEnvio": "GERADO",
+      "dataTransmissao": "2026-11-13T16:16:41.687Z",
+      "arquivoXmlSimulado": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><eSocial><evtAdmissao><cpfTrab>52998224725</cpfTrab><nmTrab>Teste Admissao Local</nmTrab><matricula>00107</matricula></evtAdmissao></eSocial>"
+    },
+    {
       "id": "es-1",
       "codigoEvento": "S-1000",
       "descricao": "Informações do Empregador / Contribuinte",
