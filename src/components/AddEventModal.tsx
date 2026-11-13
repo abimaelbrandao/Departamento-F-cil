@@ -1,20 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Empregado, Empresa, Rubrica, LancamentoVariavel } from '../types/dp';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Empregado, Empresa, LancamentoVariavel } from '../types/dp';
 import { RUBRICAS_SISTEMA } from '../data/initialData';
 import { api } from '../services/api';
 import { formatarMoeda } from '../utils/formatters';
 import {
-  Plus,
   X,
   CheckCircle2,
   AlertCircle,
   Calculator,
   Users,
   User,
-  Clock,
-  DollarSign,
-  Calendar,
-  Layers,
+  Edit3,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -29,6 +26,24 @@ interface Props {
   lancamentoEmEdicao?: LancamentoVariavel | null;
 }
 
+function parseNumeroDecimal(raw: string | number): number {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+  const txt = String(raw || '').trim().replace(/\s/g, '');
+  if (!txt) return 0;
+  const normalized =
+    txt.includes(',') && txt.includes('.')
+      ? txt.replace(/\./g, '').replace(',', '.')
+      : txt.replace(',', '.');
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function unidadePadraoPorRubrica(codigo: string): 'HORAS' | 'DIAS' | 'PERCENTUAL' | 'VALOR' {
+  if (codigo === '0101' || codigo === '0102' || codigo === '0103') return 'HORAS';
+  if (codigo === '0201' || codigo === '0202') return 'DIAS';
+  return 'VALOR';
+}
+
 export const AddEventModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -37,100 +52,141 @@ export const AddEventModal: React.FC<Props> = ({
   empregados,
   colaboradorPreSelecionado,
   onEventoSalvo,
-  onCriarCompetenciaSolicitada,
   lancamentoEmEdicao,
 }) => {
   const [modoLote, setModoLote] = useState(false);
   const [empregadoId, setEmpregadoId] = useState<string>(colaboradorPreSelecionado?.id || '');
   const [empregadosSelecionadosLote, setEmpregadosSelecionadosLote] = useState<string[]>([]);
   const [rubricaCodigo, setRubricaCodigo] = useState('0101');
-  const [referencia, setReferencia] = useState<number>(10);
+  const [nomeEvento, setNomeEvento] = useState('Horas Extras 50% Diurna');
+  const [nomeEditadoManualmente, setNomeEditadoManualmente] = useState(false);
+  const [referenciaInput, setReferenciaInput] = useState<string>('10');
   const [unidadeReferencia, setUnidadeReferencia] = useState<'HORAS' | 'DIAS' | 'PERCENTUAL' | 'VALOR'>('HORAS');
-  const [valorManual, setValorManual] = useState<number>(0);
+  const [valorManualInput, setValorManualInput] = useState<string>('0');
   const [observacao, setObservacao] = useState('');
-  const [competenciaInformada, setCompetenciaInformada] = useState(competenciaAtual || '06/2026');
+  const [competenciaInformada, setCompetenciaInformada] = useState(competenciaAtual || '05/2026');
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Colaboradores ativos da empresa
-  const colaboradoresAtivos = empregados.filter(
-    e => e.empresaId === empresa.id && e.status !== 'desligado'
+  const colaboradoresAtivos = useMemo(
+    () => empregados.filter(e => e.empresaId === empresa.id && e.status !== 'desligado'),
+    [empregados, empresa.id]
   );
 
-  useEffect(() => {
-    if (colaboradorPreSelecionado) {
-      setEmpregadoId(colaboradorPreSelecionado.id);
-    } else if (colaboradoresAtivos.length > 0 && !empregadoId) {
-      setEmpregadoId(colaboradoresAtivos[0].id);
-    }
-  }, [colaboradorPreSelecionado, colaboradoresAtivos]);
+  const rubricaSelecionada =
+    RUBRICAS_SISTEMA.find(r => r.codigo === rubricaCodigo) || RUBRICAS_SISTEMA[0];
+  const empregadoSelecionado = colaboradoresAtivos.find(e => e.id === empregadoId);
 
+  // Inicializa / reseta o formulário ao abrir o modal
   useEffect(() => {
+    if (!isOpen) return;
+    setErro(null);
+
     if (lancamentoEmEdicao) {
       setEmpregadoId(lancamentoEmEdicao.empregadoId);
       setRubricaCodigo(lancamentoEmEdicao.rubricaCodigo);
-      setReferencia(lancamentoEmEdicao.referencia);
-      setUnidadeReferencia(lancamentoEmEdicao.unidadeReferencia);
-      setValorManual(lancamentoEmEdicao.valor);
+      setNomeEvento(lancamentoEmEdicao.descricao || '');
+      setNomeEditadoManualmente(true);
+      setReferenciaInput(String(lancamentoEmEdicao.referencia ?? 1));
+      setUnidadeReferencia(lancamentoEmEdicao.unidadeReferencia || 'VALOR');
+      setValorManualInput(String(lancamentoEmEdicao.valor ?? 0));
       setObservacao(lancamentoEmEdicao.observacao || '');
-      setCompetenciaInformada(lancamentoEmEdicao.competencia);
+      setCompetenciaInformada(lancamentoEmEdicao.competencia || competenciaAtual);
       setModoLote(false);
-    }
-  }, [lancamentoEmEdicao]);
-
-  useEffect(() => {
-    setCompetenciaInformada(competenciaAtual);
-  }, [competenciaAtual]);
-
-  const rubricaSelecionada = RUBRICAS_SISTEMA.find(r => r.codigo === rubricaCodigo) || RUBRICAS_SISTEMA[0];
-  const empregadoSelecionado = colaboradoresAtivos.find(e => e.id === empregadoId);
-
-  // Atualiza unidade default conforme a rubrica
-  useEffect(() => {
-    if (!lancamentoEmEdicao) {
-      if (rubricaCodigo === '0101' || rubricaCodigo === '0102' || rubricaCodigo === '0103') {
-        setUnidadeReferencia('HORAS');
-      } else if (rubricaCodigo === '0201' || rubricaCodigo === '0202') {
-        setUnidadeReferencia('DIAS');
-      } else if (rubricaCodigo === '0105' || rubricaCodigo === '0020') {
-        setUnidadeReferencia('VALOR');
+    } else {
+      const rubInicial = RUBRICAS_SISTEMA.find(r => r.codigo === '0101') || RUBRICAS_SISTEMA[0];
+      setRubricaCodigo(rubInicial.codigo);
+      setNomeEvento(rubInicial.descricao);
+      setNomeEditadoManualmente(false);
+      setUnidadeReferencia(unidadePadraoPorRubrica(rubInicial.codigo));
+      setReferenciaInput('10');
+      setValorManualInput('0');
+      setObservacao('');
+      setCompetenciaInformada(competenciaAtual || '05/2026');
+      setModoLote(false);
+      setEmpregadosSelecionadosLote([]);
+      if (colaboradorPreSelecionado) {
+        setEmpregadoId(colaboradorPreSelecionado.id);
+      } else if (colaboradoresAtivos.length > 0) {
+        setEmpregadoId(colaboradoresAtivos[0].id);
+      } else {
+        setEmpregadoId('');
       }
     }
-  }, [rubricaCodigo, lancamentoEmEdicao]);
+  }, [isOpen, lancamentoEmEdicao, colaboradorPreSelecionado, competenciaAtual]);
 
-  // Cálculo de valor sugerido/estimado
-  const calcularValorSugerido = () => {
-    if (!empregadoSelecionado) return 0;
-    const salario = empregadoSelecionado.salarioBase || 0;
-    const divisor = empregadoSelecionado.divisorHoras || 220;
-    const valorHora = salario / divisor;
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!empregadoId && colaboradoresAtivos.length > 0) {
+      setEmpregadoId(colaboradoresAtivos[0].id);
+    }
+  }, [isOpen, colaboradoresAtivos, empregadoId]);
 
-    if (rubricaCodigo === '0101') {
-      // HE 50%
-      return Math.round(valorHora * 1.5 * referencia * 100) / 100;
+  const handleTrocarRubrica = (novoCodigo: string) => {
+    setRubricaCodigo(novoCodigo);
+    const novaRub = RUBRICAS_SISTEMA.find(r => r.codigo === novoCodigo);
+    if (novaRub && !nomeEditadoManualmente) {
+      setNomeEvento(novaRub.descricao);
     }
-    if (rubricaCodigo === '0102') {
-      // HE 100%
-      return Math.round(valorHora * 2.0 * referencia * 100) / 100;
+    const novaUnidade = unidadePadraoPorRubrica(novoCodigo);
+    setUnidadeReferencia(novaUnidade);
+
+    if (novaUnidade === 'VALOR') {
+      if (referenciaInput === '10') setReferenciaInput('1');
+      if (novoCodigo === '0015' && parseNumeroDecimal(valorManualInput) <= 0) {
+        setValorManualInput('62.04');
+      } else if (novoCodigo === '0020' && empregadoSelecionado) {
+        const adiant = Math.round((empregadoSelecionado.salarioBase || 0) * 0.4 * 100) / 100;
+        setValorManualInput(String(adiant));
+      }
+    } else if (novaUnidade === 'HORAS' && parseNumeroDecimal(referenciaInput) <= 1) {
+      setReferenciaInput('10');
+    } else if (novaUnidade === 'DIAS' && parseNumeroDecimal(referenciaInput) === 10) {
+      setReferenciaInput('1');
     }
-    if (rubricaCodigo === '0103') {
-      // Adicional Noturno 20%
-      return Math.round(valorHora * 0.2 * referencia * 100) / 100;
-    }
-    if (rubricaCodigo === '0201') {
-      // Falta em dias
-      const valorDia = salario / 30;
-      return Math.round(valorDia * referencia * 100) / 100;
-    }
-    if (rubricaCodigo === '0020') {
-      // Adiantamento 40%
-      return Math.round(salario * 0.4 * 100) / 100;
-    }
-    return valorManual;
   };
 
-  const valorEstimado = unidadeReferencia === 'VALOR' ? valorManual : calcularValorSugerido();
+  const referenciaNum = parseNumeroDecimal(referenciaInput);
+  const valorManualNum = parseNumeroDecimal(valorManualInput);
+
+  // Cálculo automático ao vivo
+  const calcularValorParaColaborador = (emp?: Empregado): number => {
+    if (unidadeReferencia === 'VALOR') {
+      return Math.round(valorManualNum * 100) / 100;
+    }
+    if (!emp) return Math.round(valorManualNum * 100) / 100;
+
+    const salario = emp.salarioBase || 0;
+    const divisor = emp.divisorHoras || 220;
+    const valorHora = salario / divisor;
+    const valorDia = salario / 30;
+
+    if (rubricaCodigo === '0101') {
+      return Math.round(valorHora * 1.5 * referenciaNum * 100) / 100;
+    }
+    if (rubricaCodigo === '0102') {
+      return Math.round(valorHora * 2.0 * referenciaNum * 100) / 100;
+    }
+    if (rubricaCodigo === '0103') {
+      return Math.round(valorHora * 0.2 * referenciaNum * 100) / 100;
+    }
+    if (rubricaCodigo === '0201') {
+      return Math.round(valorDia * referenciaNum * 100) / 100;
+    }
+    if (unidadeReferencia === 'PERCENTUAL') {
+      return Math.round(salario * (referenciaNum / 100) * 100) / 100;
+    }
+    if (unidadeReferencia === 'DIAS') {
+      return Math.round(valorDia * referenciaNum * 100) / 100;
+    }
+    if (unidadeReferencia === 'HORAS') {
+      return Math.round(valorHora * referenciaNum * 100) / 100;
+    }
+    return Math.round(valorManualNum * 100) / 100;
+  };
+
+  const valorEstimado = calcularValorParaColaborador(empregadoSelecionado);
 
   if (!isOpen) return null;
 
@@ -139,54 +195,73 @@ export const AddEventModal: React.FC<Props> = ({
     setErro(null);
 
     if (!modoLote && !empregadoId) {
-      setErro('Selecione um colaborador.');
+      setErro('Selecione um colaborador ativo para lançar o evento.');
       return;
     }
     if (modoLote && empregadosSelecionadosLote.length === 0) {
       setErro('Selecione pelo menos um colaborador para o lançamento em lote.');
       return;
     }
-    if (!referencia || referencia <= 0) {
-      setErro('Informe uma referência válida maior que zero.');
+
+    const nomeFinal = nomeEvento.trim() || rubricaSelecionada.descricao;
+    if (!nomeFinal) {
+      setErro('Informe o nome do evento na folha.');
       return;
     }
+
+    if (unidadeReferencia === 'VALOR') {
+      if (valorManualNum <= 0) {
+        setErro('Informe um valor monetário (R$) válido maior que zero.');
+        return;
+      }
+    } else if (referenciaNum <= 0) {
+      setErro('Informe uma quantidade/referência válida maior que zero.');
+      return;
+    }
+
+    const refFinal = unidadeReferencia === 'VALOR' && referenciaNum <= 0 ? 1 : referenciaNum;
 
     try {
       setSalvando(true);
 
-      // Garante que a competência existe no servidor
-      await api.criarCompetencia({
-        empresaId: empresa.id,
-        competencia: competenciaInformada,
-      });
+      // Garante que a competência existe no servidor/cache
+      try {
+        await api.criarCompetencia({
+          empresaId: empresa.id,
+          competencia: competenciaInformada,
+        });
+      } catch {
+        // Segue se o cache local já mantiver a competência
+      }
 
       if (lancamentoEmEdicao) {
-        // Edição de lançamento existente
-        await api.editarLancamento(lancamentoEmEdicao.id, {
-          rubricaCodigo,
-          descricao: rubricaSelecionada.descricao,
-          referencia: Number(referencia),
-          unidadeReferencia,
-          valor: Number(valorEstimado),
-          observacao,
-        });
+        await api.editarLancamento(
+          lancamentoEmEdicao.id,
+          {
+            rubricaCodigo,
+            descricao: nomeFinal,
+            referencia: refFinal,
+            unidadeReferencia,
+            valor: Number(valorEstimado),
+            observacao,
+          },
+          {
+            empresa,
+            empregado: empregadoSelecionado,
+            empregados,
+            lancamentoBase: lancamentoEmEdicao,
+          }
+        );
       } else if (modoLote) {
-        // Lançamento em lote
         const lancamentos = empregadosSelecionadosLote.map(empId => {
           const emp = colaboradoresAtivos.find(c => c.id === empId);
-          let val = valorEstimado;
-          if (emp && unidadeReferencia === 'HORAS') {
-            const vh = emp.salarioBase / (emp.divisorHoras || 220);
-            const fator = rubricaCodigo === '0102' ? 2.0 : 1.5;
-            val = Math.round(vh * fator * referencia * 100) / 100;
-          }
-
+          const val = calcularValorParaColaborador(emp);
           return {
             empregadoId: empId,
             competencia: competenciaInformada,
             rubricaCodigo,
-            descricao: rubricaSelecionada.descricao,
-            referencia: Number(referencia),
+            descricao: nomeFinal,
+            referencia: refFinal,
             unidadeReferencia,
             valor: val,
             origem: 'MANUAL' as const,
@@ -194,26 +269,36 @@ export const AddEventModal: React.FC<Props> = ({
           };
         });
 
-        await api.salvarLancamentosLote({ lancamentos });
-      } else {
-        // Lançamento individual
-        await api.salvarLancamento({
-          empregadoId,
-          competencia: competenciaInformada,
-          rubricaCodigo,
-          descricao: rubricaSelecionada.descricao,
-          referencia: Number(referencia),
-          unidadeReferencia,
-          valor: Number(valorEstimado),
-          origem: 'MANUAL',
-          observacao,
+        await api.salvarLancamentosLote({
+          lancamentos,
+          empresa,
+          empregados,
         });
+      } else {
+        await api.salvarLancamento(
+          {
+            empregadoId,
+            competencia: competenciaInformada,
+            rubricaCodigo,
+            descricao: nomeFinal,
+            referencia: refFinal,
+            unidadeReferencia,
+            valor: Number(valorEstimado),
+            origem: 'MANUAL',
+            observacao,
+          },
+          {
+            empresa,
+            empregado: empregadoSelecionado,
+            empregados,
+          }
+        );
       }
 
-      onEventoSalvo();
+      await onEventoSalvo();
       onClose();
     } catch (err: any) {
-      setErro(err.message || 'Erro ao registrar evento.');
+      setErro(err?.message || 'Erro ao registrar evento na folha.');
     } finally {
       setSalvando(false);
     }
@@ -247,6 +332,7 @@ export const AddEventModal: React.FC<Props> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg transition-colors"
           >
@@ -305,15 +391,18 @@ export const AddEventModal: React.FC<Props> = ({
                 disabled={Boolean(lancamentoEmEdicao)}
                 className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
               >
-                {colaboradoresAtivos.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.nomeCompleto} - Matrícula {emp.matricula} ({emp.cargo}) - Salário {formatarMoeda(emp.salarioBase)}
-                  </option>
-                ))}
+                {colaboradoresAtivos.length === 0 ? (
+                  <option value="">Nenhum colaborador ativo nesta empresa</option>
+                ) : (
+                  colaboradoresAtivos.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.nomeCompleto} - Matrícula {emp.matricula} ({emp.cargo}) - Salário {formatarMoeda(emp.salarioBase)}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           ) : (
-            /* Seleção dos Colaboradores (Modo Lote) */
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
@@ -363,7 +452,7 @@ export const AddEventModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Seleção de Rubrica */}
+          {/* Seleção de Rubrica + Nome Editável */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
             <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
               Evento / Rubrica a Lançar
@@ -376,7 +465,7 @@ export const AddEventModal: React.FC<Props> = ({
                 </label>
                 <select
                   value={rubricaCodigo}
-                  onChange={e => setRubricaCodigo(e.target.value)}
+                  onChange={e => handleTrocarRubrica(e.target.value)}
                   className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
                 >
                   <optgroup label="Proventos (Rendimentos)">
@@ -412,46 +501,105 @@ export const AddEventModal: React.FC<Props> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Quantidade / Referência <span className="text-rose-500">*</span>
-                </label>
+              {/* Nome Editável do Evento */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Edit3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>
+                      Nome do Evento na Folha e Recibo <span className="text-rose-500">*</span>
+                    </span>
+                  </label>
+                  {nomeEvento.trim() !== rubricaSelecionada.descricao && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNomeEvento(rubricaSelecionada.descricao);
+                        setNomeEditadoManualmente(false);
+                      }}
+                      className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Restaurar nome padrão
+                    </button>
+                  )}
+                </div>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
                   required
-                  value={referencia}
-                  onChange={e => setReferencia(Number(e.target.value))}
-                  placeholder="Ex: 10"
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono font-bold"
+                  value={nomeEvento}
+                  onChange={e => {
+                    setNomeEvento(e.target.value);
+                    setNomeEditadoManualmente(true);
+                  }}
+                  placeholder="Ex: Gratificação de Desempenho, Hora Extra Projeto X, Auxílio Creche..."
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Valor Estimado do Lançamento
-                </label>
-                {unidadeReferencia === 'VALOR' ? (
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={valorManual}
-                    onChange={e => setValorManual(Number(e.target.value))}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono font-bold"
-                  />
-                ) : (
-                  <div className="p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 flex items-center justify-between">
-                    <span>{formatarMoeda(valorEstimado)}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Cálculo ao vivo CLT</span>
+              {unidadeReferencia === 'VALOR' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Valor do Lançamento (R$) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={valorManualInput}
+                      onChange={e => setValorManualInput(e.target.value)}
+                      placeholder="Ex: 67,54"
+                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono font-bold"
+                    />
                   </div>
-                )}
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Quantidade / Referência (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={referenciaInput}
+                      onChange={e => setReferenciaInput(e.target.value)}
+                      placeholder="Ex: 1"
+                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono font-bold"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Quantidade / Referência <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={referenciaInput}
+                      onChange={e => setReferenciaInput(e.target.value)}
+                      placeholder="Ex: 10 ou 6,5"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Valor Estimado do Lançamento
+                    </label>
+                    <div className="p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 flex items-center justify-between">
+                      <span>{formatarMoeda(valorEstimado)}</span>
+                      <span className="text-[10px] text-slate-400 font-normal">Cálculo ao vivo CLT</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Informações da Rubrica e Incidências */}
             <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-slate-500 dark:text-slate-400">Tipo:</span>
                 <span
                   className={`font-bold ${
@@ -499,7 +647,7 @@ export const AddEventModal: React.FC<Props> = ({
             </button>
             <button
               type="submit"
-              disabled={salvando}
+              disabled={salvando || colaboradoresAtivos.length === 0}
               className="flex items-center gap-1.5 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" />

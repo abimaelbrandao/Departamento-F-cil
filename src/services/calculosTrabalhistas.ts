@@ -1,4 +1,5 @@
 import { Empregado, ItemCalculadoFolha, FolhaEmpregado, Empresa, LancamentoVariavel } from '../types/dp';
+import { RUBRICAS_SISTEMA } from '../data/initialData';
 
 // Constantes vigentes da Legislação Trabalhista e Previdenciária Brasileira
 export const TABELA_INSS_VIGENTE = [
@@ -253,21 +254,25 @@ export function processarFolhaEmpregado(
 
   // 2. Processamento dos lançamentos variáveis da competência
   for (const lancamento of lancamentos) {
+    const descricaoEvento = (lancamento.descricao || '').trim();
+    const refNum = Number(lancamento.referencia) || 0;
+    const valInformado = Number(lancamento.valor) || 0;
+
     if (lancamento.rubricaCodigo === '0101') {
       // Hora Extra 50%
-      const qtdHoras = lancamento.referencia;
-      const valorHoraExtra = Math.round((salarioHora * 1.50 * qtdHoras) * 100) / 100;
+      const qtdHoras = refNum;
+      const valorHoraExtra = valInformado > 0 ? Math.round(valInformado * 100) / 100 : Math.round((salarioHora * 1.50 * qtdHoras) * 100) / 100;
       totalHorasExtrasValor += valorHoraExtra;
 
       itens.push({
         rubricaCodigo: '0101',
-        descricao: 'Horas Extras 50%',
+        descricao: descricaoEvento || 'Horas Extras 50%',
         tipo: 'PROVENTO',
         referencia: qtdHoras,
         provento: valorHoraExtra,
         desconto: 0,
         memoriaCalculo: {
-          titulo: 'Hora Extra 50% Diurna',
+          titulo: descricaoEvento || 'Hora Extra 50% Diurna',
           formula: '(Salário Base ÷ Divisor) × 1,50 × Quantidade de Horas',
           passoAPasso: [
             `Salário Base: R$ ${empregado.salarioBase.toFixed(2)}`,
@@ -275,7 +280,7 @@ export function processarFolhaEmpregado(
             `Salário-hora ordinário: R$ ${salarioHora.toFixed(4)}`,
             `Adicional de 50%: R$ ${salarioHora.toFixed(4)} × 1,50 = R$ ${(salarioHora * 1.5).toFixed(4)}/hora`,
             `Horas apuradas: ${qtdHoras} horas`,
-            `Resultado: R$ ${(salarioHora * 1.5).toFixed(4)} × ${qtdHoras} = R$ ${valorHoraExtra.toFixed(2)}`
+            `Resultado: R$ ${valorHoraExtra.toFixed(2)}`
           ],
           baseCalculo: empregado.salarioBase,
           aliquotasOuFatores: { salarioHora: salarioHora.toFixed(4), multiplicador: 1.5, horas: qtdHoras },
@@ -284,26 +289,26 @@ export function processarFolhaEmpregado(
       });
     } else if (lancamento.rubricaCodigo === '0102') {
       // Hora Extra 100%
-      const qtdHoras = lancamento.referencia;
-      const valorHoraExtra = Math.round((salarioHora * 2.00 * qtdHoras) * 100) / 100;
+      const qtdHoras = refNum;
+      const valorHoraExtra = valInformado > 0 ? Math.round(valInformado * 100) / 100 : Math.round((salarioHora * 2.00 * qtdHoras) * 100) / 100;
       totalHorasExtrasValor += valorHoraExtra;
 
       itens.push({
         rubricaCodigo: '0102',
-        descricao: 'Horas Extras 100% (Domingos/Feriados)',
+        descricao: descricaoEvento || 'Horas Extras 100% (Domingos/Feriados)',
         tipo: 'PROVENTO',
         referencia: qtdHoras,
         provento: valorHoraExtra,
         desconto: 0,
         memoriaCalculo: {
-          titulo: 'Hora Extra 100% em Domingos e Feriados',
+          titulo: descricaoEvento || 'Hora Extra 100% em Domingos e Feriados',
           formula: '(Salário Base ÷ Divisor) × 2,00 × Quantidade de Horas',
           passoAPasso: [
             `Salário Base: R$ ${empregado.salarioBase.toFixed(2)}`,
             `Salário-hora ordinário: R$ ${salarioHora.toFixed(4)}`,
             `Adicional de 100%: R$ ${salarioHora.toFixed(4)} × 2,00 = R$ ${(salarioHora * 2.0).toFixed(4)}/hora`,
             `Horas apuradas: ${qtdHoras} horas`,
-            `Resultado: R$ ${(salarioHora * 2.0).toFixed(4)} × ${qtdHoras} = R$ ${valorHoraExtra.toFixed(2)}`
+            `Resultado: R$ ${valorHoraExtra.toFixed(2)}`
           ],
           baseCalculo: empregado.salarioBase,
           aliquotasOuFatores: { salarioHora: salarioHora.toFixed(4), multiplicador: 2.0, horas: qtdHoras },
@@ -312,28 +317,28 @@ export function processarFolhaEmpregado(
       });
     } else if (lancamento.rubricaCodigo === '0103') {
       // Adicional Noturno 20%
-      const qtdHoras = lancamento.referencia;
+      const qtdHoras = refNum;
       // Fator de redução da hora noturna (60 / 52.5 = 1.142857)
       const horasFictas = qtdHoras * (60 / 52.5);
-      const valorNoturno = Math.round((salarioHora * 0.20 * horasFictas) * 100) / 100;
+      const valorNoturno = valInformado > 0 ? Math.round(valInformado * 100) / 100 : Math.round((salarioHora * 0.20 * horasFictas) * 100) / 100;
       totalAdicionaisValor += valorNoturno;
 
       itens.push({
         rubricaCodigo: '0103',
-        descricao: 'Adicional Noturno 20%',
+        descricao: descricaoEvento || 'Adicional Noturno 20%',
         tipo: 'PROVENTO',
         referencia: qtdHoras,
         provento: valorNoturno,
         desconto: 0,
         memoriaCalculo: {
-          titulo: 'Adicional Noturno Urbano com Redução Ficta',
+          titulo: descricaoEvento || 'Adicional Noturno Urbano com Redução Ficta',
           formula: '(Salário-hora × 20%) × (Horas relógio × 60 ÷ 52,5)',
           passoAPasso: [
             `Horas noturnas no ponto: ${qtdHoras} horas`,
             `Conversão da hora reduzida (Art. 73 §1º CLT): ${qtdHoras} × 1,142857 = ${horasFictas.toFixed(2)} horas computadas`,
             `Salário-hora: R$ ${salarioHora.toFixed(4)}`,
             `Adicional noturno unitário (20%): R$ ${(salarioHora * 0.2).toFixed(4)}`,
-            `Resultado: R$ ${(salarioHora * 0.2).toFixed(4)} × ${horasFictas.toFixed(2)} = R$ ${valorNoturno.toFixed(2)}`
+            `Resultado: R$ ${valorNoturno.toFixed(2)}`
           ],
           baseCalculo: empregado.salarioBase,
           aliquotasOuFatores: { percentual: 20, horaFictaFator: 1.142857 },
@@ -342,25 +347,25 @@ export function processarFolhaEmpregado(
       });
     } else if (lancamento.rubricaCodigo === '0201') {
       // Faltas Injustificadas
-      const diasFalta = lancamento.referencia;
-      const valorFalta = Math.round((salarioDia * diasFalta) * 100) / 100;
+      const diasFalta = refNum;
+      const valorFalta = valInformado > 0 ? Math.round(valInformado * 100) / 100 : Math.round((salarioDia * diasFalta) * 100) / 100;
       totalFaltasValor += valorFalta;
 
       itens.push({
         rubricaCodigo: '0201',
-        descricao: 'Faltas Injustificadas',
+        descricao: descricaoEvento || 'Faltas Injustificadas',
         tipo: 'DESCONTO',
         referencia: `${diasFalta}D`,
         provento: 0,
         desconto: valorFalta,
         memoriaCalculo: {
-          titulo: 'Desconto de Faltas Injustificadas',
+          titulo: descricaoEvento || 'Desconto de Faltas Injustificadas',
           formula: '(Salário Base ÷ 30) × Dias de Falta',
           passoAPasso: [
             `Salário Base: R$ ${empregado.salarioBase.toFixed(2)}`,
             `Salário-dia: R$ ${salarioDia.toFixed(4)}`,
             `Dias de ausência injustificada: ${diasFalta}`,
-            `Cálculo: R$ ${salarioDia.toFixed(4)} × ${diasFalta} = R$ ${valorFalta.toFixed(2)}`
+            `Cálculo: R$ ${valorFalta.toFixed(2)}`
           ],
           baseCalculo: empregado.salarioBase,
           aliquotasOuFatores: { diasFalta, salarioDia: salarioDia.toFixed(2) },
@@ -392,26 +397,93 @@ export function processarFolhaEmpregado(
       });
     } else if (lancamento.rubricaCodigo === '0105') {
       // Gratificações / Comissões
+      const valorItem = valInformado > 0
+        ? Math.round(valInformado * 100) / 100
+        : lancamento.unidadeReferencia === 'PERCENTUAL'
+        ? Math.round((empregado.salarioBase * (refNum / 100)) * 100) / 100
+        : Math.round(refNum * 100) / 100;
       itens.push({
         rubricaCodigo: '0105',
-        descricao: lancamento.descricao || 'Comissões / Gratificação',
+        descricao: descricaoEvento || 'Comissões / Gratificação',
         tipo: 'PROVENTO',
-        referencia: '100%',
-        provento: lancamento.valor,
+        referencia: lancamento.unidadeReferencia === 'PERCENTUAL' ? `${refNum}%` : '100%',
+        provento: valorItem,
         desconto: 0,
         memoriaCalculo: {
-          titulo: 'Comissões e Prêmios de Produtividade',
+          titulo: descricaoEvento || 'Comissões e Prêmios de Produtividade',
           formula: 'Valor apurado ou declarado para a competência',
           passoAPasso: [
-            `Valor informado pela empresa: R$ ${lancamento.valor.toFixed(2)}`,
-            `Origem: ${lancamento.origem}`,
+            `Valor informado pela empresa: R$ ${valorItem.toFixed(2)}`,
+            `Origem: ${lancamento.origem || 'MANUAL'}`,
             `Incide integralmente para INSS, FGTS e IRRF.`
           ],
-          baseCalculo: lancamento.valor,
-          aliquotasOuFatores: { valor: lancamento.valor },
+          baseCalculo: valorItem,
+          aliquotasOuFatores: { valor: valorItem },
           fundamentoLegal: 'Art. 457, § 1º da CLT'
         }
       });
+    } else {
+      // Qualquer outra rubrica cadastrada/lançada manualmente (0015, 0020, 0104, 0202, 0301, 0302, 908, 310, etc.)
+      const rubricaMeta = RUBRICAS_SISTEMA.find(r => r.codigo === lancamento.rubricaCodigo);
+      const tipoRubrica: 'PROVENTO' | 'DESCONTO' =
+        rubricaMeta?.tipo === 'DESCONTO' ||
+        (!rubricaMeta && /^(02|03|09|3)/.test(lancamento.rubricaCodigo || ''))
+          ? 'DESCONTO'
+          : 'PROVENTO';
+
+      let valorCalculado = valInformado;
+      if (valorCalculado <= 0) {
+        if (lancamento.unidadeReferencia === 'PERCENTUAL') {
+          valorCalculado = empregado.salarioBase * (refNum / 100);
+        } else if (lancamento.unidadeReferencia === 'DIAS') {
+          valorCalculado = salarioDia * refNum;
+        } else if (lancamento.unidadeReferencia === 'HORAS') {
+          valorCalculado = salarioHora * refNum;
+        } else {
+          valorCalculado = refNum;
+        }
+      }
+      valorCalculado = Math.round(valorCalculado * 100) / 100;
+
+      if (valorCalculado > 0) {
+        const refDisplay =
+          lancamento.unidadeReferencia === 'PERCENTUAL'
+            ? `${refNum}%`
+            : lancamento.unidadeReferencia === 'DIAS'
+            ? `${refNum}D`
+            : lancamento.unidadeReferencia === 'HORAS'
+            ? `${refNum}h`
+            : '100%';
+
+        itens.push({
+          rubricaCodigo: lancamento.rubricaCodigo || '0105',
+          descricao: descricaoEvento || rubricaMeta?.descricao || 'Evento Variável',
+          tipo: tipoRubrica,
+          referencia: refDisplay,
+          provento: tipoRubrica === 'PROVENTO' ? valorCalculado : 0,
+          desconto: tipoRubrica === 'DESCONTO' ? valorCalculado : 0,
+          memoriaCalculo: {
+            titulo: descricaoEvento || rubricaMeta?.descricao || 'Evento Variável da Folha',
+            formula:
+              lancamento.unidadeReferencia === 'PERCENTUAL'
+                ? 'Salário Base × Percentual informado'
+                : lancamento.unidadeReferencia === 'DIAS'
+                ? '(Salário Base ÷ 30) × Dias informados'
+                : lancamento.unidadeReferencia === 'HORAS'
+                ? '(Salário Base ÷ Divisor) × Horas informadas'
+                : 'Valor direto informado pelo operador',
+            passoAPasso: [
+              `Rubrica: ${lancamento.rubricaCodigo} - ${descricaoEvento || rubricaMeta?.descricao || 'Evento Variável'}`,
+              `Referência informada: ${refNum} (${lancamento.unidadeReferencia || 'VALOR'})`,
+              `Valor apurado: R$ ${valorCalculado.toFixed(2)}`,
+              lancamento.observacao ? `Observação: ${lancamento.observacao}` : `Origem: ${lancamento.origem || 'MANUAL'}`
+            ],
+            baseCalculo: valorCalculado,
+            aliquotasOuFatores: { referencia: refNum, unidade: lancamento.unidadeReferencia || 'VALOR' },
+            fundamentoLegal: rubricaMeta?.baseCalculoLegal || 'Art. 457 e 462 da CLT'
+          }
+        });
+      }
     }
   }
 
@@ -534,18 +606,21 @@ export function processarFolhaEmpregado(
   let somaDescontosNaoFiscais = 0;
 
   for (const item of itens) {
+    const rubricaMeta = RUBRICAS_SISTEMA.find(r => r.codigo === item.rubricaCodigo);
     if (item.tipo === 'PROVENTO') {
       somaProventos += item.provento;
-      // Salário-família não tem incidência de INSS nem FGTS
-      if (item.rubricaCodigo !== '0015') {
-        baseINSS += item.provento;
-        baseFGTS += item.provento;
-      }
+      // Salário-família (0015) e Adiantamento (0020) não incidem INSS/FGTS
+      const incideINSS = rubricaMeta ? rubricaMeta.incideINSS : item.rubricaCodigo !== '0015' && item.rubricaCodigo !== '0020';
+      const incideFGTS = rubricaMeta ? rubricaMeta.incideFGTS : item.rubricaCodigo !== '0015' && item.rubricaCodigo !== '0020';
+      if (incideINSS) baseINSS += item.provento;
+      if (incideFGTS) baseFGTS += item.provento;
     } else if (item.tipo === 'DESCONTO') {
       somaDescontosNaoFiscais += item.desconto;
-      // Faltas reduzem a base do INSS e FGTS
-      if (item.rubricaCodigo === '0201' || item.rubricaCodigo === '0202') {
+      // Faltas e descontos com incidência reduzem a base do INSS e FGTS
+      if (item.rubricaCodigo === '0201' || item.rubricaCodigo === '0202' || rubricaMeta?.incideINSS) {
         baseINSS = Math.max(0, baseINSS - item.desconto);
+      }
+      if (item.rubricaCodigo === '0201' || item.rubricaCodigo === '0202' || rubricaMeta?.incideFGTS) {
         baseFGTS = Math.max(0, baseFGTS - item.desconto);
       }
     }

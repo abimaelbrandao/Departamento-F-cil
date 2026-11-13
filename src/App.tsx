@@ -161,6 +161,9 @@ export default function App() {
   const [empregadoPreSelecionadoEvento, setEmpregadoPreSelecionadoEvento] = useState<Empregado | null>(null);
   const [lancamentosVariaveis, setLancamentosVariaveis] = useState<LancamentoVariavel[]>([]);
   const [lancamentoParaEditar, setLancamentoParaEditar] = useState<LancamentoVariavel | null>(null);
+  const [lancamentoRenomeandoId, setLancamentoRenomeandoId] = useState<string | null>(null);
+  const [novoNomeLancamento, setNovoNomeLancamento] = useState('');
+  const [salvandoNomeLancamento, setSalvandoNomeLancamento] = useState(false);
 
   // Ações de Colaborador (Ficha, Edição, Alteração Salarial/Função, Desligamento, Exclusão)
   const [modalEmployeeActionAberto, setModalEmployeeActionAberto] = useState(false);
@@ -354,6 +357,8 @@ export default function App() {
         empresaId: empresaAtivaId,
         competencia: competenciaAtiva,
         tipoFolha: 'MENSAL',
+        empresa: empresaAtiva || undefined,
+        empregados,
       });
       await carregarDadosCompetencia();
       mostrarNotificacao('Folha de pagamento calculada com sucesso com regras vigentes e memória analítica!', 'sucesso');
@@ -1845,12 +1850,109 @@ export default function App() {
                                 </span>
                               </td>
                               <td className="py-2.5 px-3">
-                                <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold mr-1.5">
-                                  {lanc.rubricaCodigo}
-                                </span>
-                                <span className="text-slate-800 dark:text-slate-200 font-medium">
-                                  {lanc.descricao}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold">
+                                    {lanc.rubricaCodigo}
+                                  </span>
+                                  {lancamentoRenomeandoId === lanc.id ? (
+                                    <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+                                      <input
+                                        type="text"
+                                        value={novoNomeLancamento}
+                                        onChange={e => setNovoNomeLancamento(e.target.value)}
+                                        onKeyDown={async e => {
+                                          if (e.key === 'Escape') {
+                                            setLancamentoRenomeandoId(null);
+                                            setNovoNomeLancamento('');
+                                          } else if (e.key === 'Enter' && novoNomeLancamento.trim() && !salvandoNomeLancamento) {
+                                            try {
+                                              setSalvandoNomeLancamento(true);
+                                              await api.editarLancamento(
+                                                lanc.id,
+                                                { descricao: novoNomeLancamento.trim() },
+                                                {
+                                                  empresa: empresaAtiva || undefined,
+                                                  empregado: emp,
+                                                  empregados,
+                                                  lancamentoBase: lanc,
+                                                }
+                                              );
+                                              setLancamentoRenomeandoId(null);
+                                              setNovoNomeLancamento('');
+                                              await carregarDadosCompetencia();
+                                              mostrarNotificacao('Nome do evento atualizado e refletido na folha!', 'sucesso');
+                                            } catch (err: any) {
+                                              mostrarNotificacao(err.message || 'Erro ao renomear evento', 'erro');
+                                            } finally {
+                                              setSalvandoNomeLancamento(false);
+                                            }
+                                          }
+                                        }}
+                                        placeholder="Nome personalizado do evento..."
+                                        className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        autoFocus
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={!novoNomeLancamento.trim() || salvandoNomeLancamento}
+                                        onClick={async () => {
+                                          if (!novoNomeLancamento.trim()) return;
+                                          try {
+                                            setSalvandoNomeLancamento(true);
+                                            await api.editarLancamento(
+                                              lanc.id,
+                                              { descricao: novoNomeLancamento.trim() },
+                                              {
+                                                empresa: empresaAtiva || undefined,
+                                                empregado: emp,
+                                                empregados,
+                                                lancamentoBase: lanc,
+                                              }
+                                            );
+                                            setLancamentoRenomeandoId(null);
+                                            setNovoNomeLancamento('');
+                                            await carregarDadosCompetencia();
+                                            mostrarNotificacao('Nome do evento atualizado e refletido na folha!', 'sucesso');
+                                          } catch (err: any) {
+                                            mostrarNotificacao(err.message || 'Erro ao renomear evento', 'erro');
+                                          } finally {
+                                            setSalvandoNomeLancamento(false);
+                                          }
+                                        }}
+                                        className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-lg disabled:opacity-50"
+                                        title="Salvar novo nome"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setLancamentoRenomeandoId(null);
+                                          setNovoNomeLancamento('');
+                                        }}
+                                        className="p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                                        title="Cancelar renomeação"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLancamentoRenomeandoId(lanc.id);
+                                        setNovoNomeLancamento(lanc.descricao || '');
+                                      }}
+                                      className="group inline-flex items-center gap-1.5 text-left text-slate-800 dark:text-slate-200 font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                      title="Clique para editar o nome deste evento na folha e no recibo"
+                                    >
+                                      <span>{lanc.descricao}</span>
+                                      <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 opacity-80 group-hover:opacity-100 underline decoration-dotted">
+                                        renomear
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2.5 px-3 text-center font-mono font-medium text-slate-700 dark:text-slate-300">
                                 {lanc.referencia} {lanc.unidadeReferencia?.toLowerCase() || 'h'}
@@ -1870,14 +1972,19 @@ export default function App() {
                                       setModalAddEventAberto(true);
                                     }}
                                     className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition-colors"
-                                    title="Editar lançamento de evento"
+                                    title="Editar nome, rubrica e valores do evento"
                                   >
                                     <Edit2 className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     onClick={async () => {
                                       try {
-                                        await api.excluirLancamento(lanc.id);
+                                        await api.excluirLancamento(lanc.id, {
+                                          empresa: empresaAtiva || undefined,
+                                          empregadoId: lanc.empregadoId,
+                                          competencia: competenciaAtiva,
+                                          empregados,
+                                        });
                                         await carregarDadosCompetencia();
                                         mostrarNotificacao('Lançamento excluído com sucesso! Folha recalculada imediatamente.', 'sucesso');
                                       } catch (err: any) {

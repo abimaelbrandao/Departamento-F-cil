@@ -168,6 +168,120 @@ const CACHE_DELETED_COMPETENCIAS_KEY = 'dp_facil_competencias_deleted_v1';
 const CACHE_DOCUMENTOS_KEY = 'dp_facil_documentos_cache_v1';
 const CACHE_RESCISOES_KEY = 'dp_facil_rescisoes_cache_v1';
 const CACHE_FOLHAS_KEY = 'dp_facil_folhas_cache_v1';
+const CACHE_LANCAMENTOS_KEY = 'dp_facil_lancamentos_cache_v1';
+const CACHE_DELETED_LANCAMENTOS_KEY = 'dp_facil_lancamentos_deleted_v1';
+
+function getDeletedLancamentosIds(): Set<string> {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(CACHE_DELETED_LANCAMENTOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    // ignora
+  }
+  return new Set();
+}
+
+function markLancamentoDeletedLocal(id: string) {
+  try {
+    if (typeof window === 'undefined') return;
+    const ids = getDeletedLancamentosIds();
+    ids.add(id);
+    localStorage.setItem(CACHE_DELETED_LANCAMENTOS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignora
+  }
+}
+
+function getLancamentosCache(): LancamentoVariavel[] {
+  const deleted = getDeletedLancamentosIds();
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem(CACHE_LANCAMENTOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((l: LancamentoVariavel) => l && l.id && !deleted.has(l.id));
+      }
+    }
+  } catch {
+    // ignora
+  }
+  return [];
+}
+
+function setLancamentosCache(list: LancamentoVariavel[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_LANCAMENTOS_KEY, JSON.stringify(list));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function upsertLancamentosCache(items: LancamentoVariavel[]) {
+  const current = getLancamentosCache();
+  const map = new Map<string, LancamentoVariavel>();
+  for (const item of current) map.set(item.id, item);
+  for (const item of items) {
+    if (item && item.id) map.set(item.id, item);
+  }
+  setLancamentosCache(Array.from(map.values()));
+}
+
+function recalcularFolhaLocalPorCompetencia(
+  empresaId: string,
+  competencia: string,
+  empresaFallback?: Empresa,
+  empregadosFallback?: Empregado[]
+) {
+  const empresaAlvo = empresaFallback || getEmpresasCache().find(e => e.id === empresaId);
+  if (!empresaAlvo) return;
+
+  const empMap = new Map<string, Empregado>();
+  for (const e of getEmpregadosCache().filter(x => x.empresaId === empresaId)) empMap.set(e.id, e);
+  for (const e of (empregadosFallback || []).filter(x => x && x.empresaId === empresaId)) empMap.set(e.id, e);
+
+  const empregadosEmpresa = Array.from(empMap.values());
+  const compExistente = getCompetenciasCache().find(
+    c => c.empresaId === empresaId && c.competencia === competencia
+  );
+  if (compExistente?.status === 'FECHADA') return;
+
+  const ativos = empregadosEmpresa.filter(
+    e => e.status !== 'em_admissao' && e.status !== 'desligado'
+  );
+  const todosLancs = getLancamentosCache().filter(l => l.competencia === competencia);
+  const tipoFolha = (compExistente?.tipoFolha || 'MENSAL') as any;
+
+  const calculadas = ativos.map(emp => {
+    const lancsEmp = todosLancs.filter(l => l.empregadoId === emp.id);
+    return processarFolhaEmpregado(emp, empresaAlvo, competencia, lancsEmp, tipoFolha);
+  });
+
+  const compStatus: CompetenciaFolha = {
+    id: compExistente?.id || `comp-${empresaId}-${competencia.replace(/\D/g, '')}`,
+    empresaId,
+    competencia,
+    status: compExistente?.status || 'EM_CONFERENCIA',
+    tipoFolha,
+    totalEmpregadosAtivos: ativos.length,
+    totalCalculados: calculadas.length,
+    totalProventos: Math.round(calculadas.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+    totalDescontos: Math.round(calculadas.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+    totalLiquido: Math.round(calculadas.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+    totalEncargosEmpresa: Math.round(calculadas.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+    totalFGTS: Math.round(calculadas.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+    errosBloqueantes: compExistente?.errosBloqueantes || [],
+    alertasRevisao: compExistente?.alertasRevisao || [],
+  };
+
+  saveFolhaCompetenciaLocal(empresaId, competencia, calculadas, compStatus);
+}
 
 type FolhasCacheMap = Record<string, FolhaEmpregado[]>; // key: `${empresaId}_${competencia}`
 
@@ -1093,6 +1207,7 @@ export const api = {
       dados.empresa || getEmpresasCache().find(e => e.id === dados.empresaId);
     const empregadosEmpresa =
       dados.empregados || getEmpregadosCache().filter(e => e.empresaId === dados.empresaId);
+    const lancamentosComp = getLancamentosCache().filter(l => l.competencia === dados.competencia);
 
     try {
       const res: any = await requestJson(
@@ -1104,6 +1219,7 @@ export const api = {
             ...dados,
             empresa: empresaAlvo,
             empregados: empregadosEmpresa,
+            lancamentos: lancamentosComp,
           }),
         },
         'calcular folha de pagamento'
@@ -1132,9 +1248,10 @@ export const api = {
           emps = emps.filter(e => e.id === dados.empregadoId);
         }
 
-        const calculadas = emps.map(emp =>
-          processarFolhaEmpregado(emp, empresaAlvo, dados.competencia, [], (dados.tipoFolha || 'MENSAL') as any)
-        );
+        const calculadas = emps.map(emp => {
+          const lancsEmp = lancamentosComp.filter(l => l.empregadoId === emp.id);
+          return processarFolhaEmpregado(emp, empresaAlvo, dados.competencia, lancsEmp, (dados.tipoFolha || 'MENSAL') as any);
+        });
         const ativosCount = empregadosEmpresa.filter(
           e => e.status !== 'em_admissao' && e.status !== 'desligado'
         ).length;
@@ -1175,6 +1292,7 @@ export const api = {
       dados.empresa || getEmpresasCache().find(e => e.id === dados.empresaId);
     const empregadosEmpresa =
       dados.empregados || getEmpregadosCache().filter(e => e.empresaId === dados.empresaId);
+    const todosLancs = getLancamentosCache();
 
     try {
       const res = await requestJson<RespostaFolhaLote>(
@@ -1186,6 +1304,7 @@ export const api = {
             ...dados,
             empresa: empresaAlvo,
             empregados: empregadosEmpresa,
+            lancamentos: todosLancs.filter(l => dados.competencias.includes(l.competencia)),
           }),
         },
         'calcular folha em lote'
@@ -1243,9 +1362,10 @@ export const api = {
             continue;
           }
 
-          const folhas = emps.map(emp =>
-            processarFolhaEmpregado(emp, empresaAlvo, compStr, [], (dados.tipoFolha || 'MENSAL') as any)
-          );
+          const folhas = emps.map(emp => {
+            const lancsEmp = todosLancs.filter(l => l.empregadoId === emp.id && l.competencia === compStr);
+            return processarFolhaEmpregado(emp, empresaAlvo, compStr, lancsEmp, (dados.tipoFolha || 'MENSAL') as any);
+          });
           const compStatus: CompetenciaFolha = {
             id: compExistente?.id || `comp-${dados.empresaId}-${compStr.replace(/\D/g, '')}`,
             empresaId: dados.empresaId,
@@ -1576,61 +1696,288 @@ export const api = {
   async getLancamentos(competencia?: string, empregadoId?: string, empresaId?: string): Promise<LancamentoVariavel[]> {
     let url = '/api/lancamentos-variaveis?';
     if (competencia) url += `competencia=${encodeURIComponent(competencia)}&`;
-    if (empregadoId) url += `empregadoId=${empregadoId}&`;
-    if (empresaId) url += `empresaId=${empresaId}&`;
+    if (empregadoId) url += `empregadoId=${encodeURIComponent(empregadoId)}&`;
+    if (empresaId) url += `empresaId=${encodeURIComponent(empresaId)}&`;
+
+    const deleted = getDeletedLancamentosIds();
+    const empsEmpresa = empresaId
+      ? new Set(getEmpregadosCache().filter(e => e.empresaId === empresaId).map(e => e.id))
+      : null;
+
+    const filtrarLocal = (items: LancamentoVariavel[]) =>
+      items.filter(l => {
+        if (!l || !l.id || deleted.has(l.id)) return false;
+        if (competencia && l.competencia !== competencia) return false;
+        if (empregadoId && l.empregadoId !== empregadoId) return false;
+        if (empsEmpresa && !empsEmpresa.has(l.empregadoId)) return false;
+        return true;
+      });
+
     try {
-      return await requestJson<LancamentoVariavel[]>(url, undefined, 'listar lançamentos variáveis');
+      const remotos = await requestJson<LancamentoVariavel[]>(url, undefined, 'listar lançamentos variáveis');
+      if (Array.isArray(remotos)) {
+        const validosRemotos = remotos.filter(l => l && l.id && !deleted.has(l.id));
+        if (validosRemotos.length > 0) {
+          upsertLancamentosCache(validosRemotos);
+        }
+        const mergedMap = new Map<string, LancamentoVariavel>();
+        for (const l of validosRemotos) mergedMap.set(l.id, l);
+        for (const l of filtrarLocal(getLancamentosCache())) {
+          if (!mergedMap.has(l.id)) mergedMap.set(l.id, l);
+        }
+        return Array.from(mergedMap.values());
+      }
     } catch {
-      return [];
+      // Fallback para cache local
     }
+    return filtrarLocal(getLancamentosCache());
   },
 
   async getLancamentosVariaveis(empresaId: string, competencia: string): Promise<LancamentoVariavel[]> {
     return this.getLancamentos(competencia, undefined, empresaId);
   },
 
-  async salvarLancamento(lancamento: Partial<LancamentoVariavel>) {
-    return requestJson(
-      '/api/lancamentos-variaveis',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lancamento),
-      },
-      'salvar lançamento'
-    );
+  async salvarLancamento(
+    lancamento: Partial<LancamentoVariavel>,
+    contexto?: { empresa?: Empresa; empregado?: Empregado; empregados?: Empregado[] }
+  ) {
+    const empAlvo =
+      contexto?.empregado || getEmpregadosCache().find(e => e.id === lancamento.empregadoId);
+    const empresaId = contexto?.empresa?.id || empAlvo?.empresaId;
+    const empresaAlvo =
+      contexto?.empresa || (empresaId ? getEmpresasCache().find(e => e.id === empresaId) : undefined);
+
+    try {
+      const criado: LancamentoVariavel = await requestJson(
+        '/api/lancamentos-variaveis',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...lancamento,
+            empresa: empresaAlvo,
+            empregado: empAlvo,
+            empregados: contexto?.empregados,
+          }),
+        },
+        'salvar lançamento'
+      );
+      if (criado && criado.id) {
+        upsertLancamentosCache([criado]);
+      }
+      if (empresaAlvo && lancamento.competencia) {
+        recalcularFolhaLocalPorCompetencia(
+          empresaAlvo.id,
+          lancamento.competencia,
+          empresaAlvo,
+          contexto?.empregados || (empAlvo ? [empAlvo] : undefined)
+        );
+      }
+      return criado;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500) {
+        console.warn('[Departamento Fácil] Salvando evento na folha em modo contingência local:', err.message);
+        const ref = Number(lancamento.referencia) || 1;
+        const val = Number(lancamento.valor) || 0;
+        const novoLocal: LancamentoVariavel = {
+          id: lancamento.id || `lanc-local-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          empregadoId: String(lancamento.empregadoId || ''),
+          competencia: String(lancamento.competencia || '05/2026'),
+          rubricaCodigo: String(lancamento.rubricaCodigo || '0105'),
+          descricao: String(lancamento.descricao || 'Evento Variável').trim(),
+          referencia: ref,
+          unidadeReferencia: (lancamento.unidadeReferencia || 'VALOR') as any,
+          valor: val,
+          origem: lancamento.origem || 'MANUAL',
+          observacao: lancamento.observacao,
+        };
+        upsertLancamentosCache([novoLocal]);
+        if (empresaAlvo) {
+          recalcularFolhaLocalPorCompetencia(
+            empresaAlvo.id,
+            novoLocal.competencia,
+            empresaAlvo,
+            contexto?.empregados || (empAlvo ? [empAlvo] : undefined)
+          );
+        }
+        return novoLocal;
+      }
+      throw err;
+    }
   },
 
-  async editarLancamento(id: string, lancamento: Partial<LancamentoVariavel>) {
-    return requestJson(
-      `/api/lancamentos-variaveis/${id}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lancamento),
-      },
-      'editar lançamento'
-    );
+  async editarLancamento(
+    id: string,
+    lancamento: Partial<LancamentoVariavel>,
+    contexto?: { empresa?: Empresa; empregado?: Empregado; empregados?: Empregado[]; lancamentoBase?: LancamentoVariavel }
+  ) {
+    const cacheAtual = getLancamentosCache();
+    const existente = contexto?.lancamentoBase || cacheAtual.find(l => l.id === id);
+    const empId = lancamento.empregadoId || existente?.empregadoId;
+    const empAlvo = contexto?.empregado || (empId ? getEmpregadosCache().find(e => e.id === empId) : undefined);
+    const empresaId = contexto?.empresa?.id || empAlvo?.empresaId;
+    const empresaAlvo =
+      contexto?.empresa || (empresaId ? getEmpresasCache().find(e => e.id === empresaId) : undefined);
+
+    try {
+      const atualizado: LancamentoVariavel = await requestJson(
+        `/api/lancamentos-variaveis/${encodeURIComponent(id)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...lancamento,
+            lancamento: existente,
+            empresa: empresaAlvo,
+            empregado: empAlvo,
+            empregados: contexto?.empregados,
+          }),
+        },
+        'editar lançamento'
+      );
+      if (atualizado && atualizado.id) {
+        upsertLancamentosCache([atualizado]);
+        if (empresaAlvo && atualizado.competencia) {
+          recalcularFolhaLocalPorCompetencia(
+            empresaAlvo.id,
+            atualizado.competencia,
+            empresaAlvo,
+            contexto?.empregados || (empAlvo ? [empAlvo] : undefined)
+          );
+        }
+      }
+      return atualizado;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500) {
+        console.warn('[Departamento Fácil] Editando evento em modo contingência local:', err.message);
+        const atualizadoLocal: LancamentoVariavel = {
+          ...(existente || {
+            id,
+            empregadoId: String(empId || ''),
+            competencia: String(lancamento.competencia || '05/2026'),
+            rubricaCodigo: String(lancamento.rubricaCodigo || '0105'),
+            descricao: String(lancamento.descricao || 'Evento Variável'),
+            referencia: Number(lancamento.referencia) || 1,
+            unidadeReferencia: (lancamento.unidadeReferencia || 'VALOR') as any,
+            valor: Number(lancamento.valor) || 0,
+            origem: 'MANUAL',
+          }),
+          ...lancamento,
+          id,
+        };
+        upsertLancamentosCache([atualizadoLocal]);
+        if (empresaAlvo && atualizadoLocal.competencia) {
+          recalcularFolhaLocalPorCompetencia(
+            empresaAlvo.id,
+            atualizadoLocal.competencia,
+            empresaAlvo,
+            contexto?.empregados || (empAlvo ? [empAlvo] : undefined)
+          );
+        }
+        return atualizadoLocal;
+      }
+      throw err;
+    }
   },
 
-  async excluirLancamento(id: string) {
-    return requestJson(
-      `/api/lancamentos-variaveis/${id}`,
-      { method: 'DELETE' },
-      'excluir lançamento'
-    );
+  async excluirLancamento(
+    id: string,
+    contexto?: { empresa?: Empresa; empregadoId?: string; competencia?: string; empregados?: Empregado[] }
+  ) {
+    const cacheAtual = getLancamentosCache();
+    const existente = cacheAtual.find(l => l.id === id);
+    const compAlvo = contexto?.competencia || existente?.competencia;
+    const empId = contexto?.empregadoId || existente?.empregadoId;
+    const empAlvo = empId ? getEmpregadosCache().find(e => e.id === empId) : undefined;
+    const empresaId = contexto?.empresa?.id || empAlvo?.empresaId;
+    const empresaAlvo =
+      contexto?.empresa || (empresaId ? getEmpresasCache().find(e => e.id === empresaId) : undefined);
+
+    try {
+      const res = await requestJson(
+        `/api/lancamentos-variaveis/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        'excluir lançamento'
+      );
+      markLancamentoDeletedLocal(id);
+      setLancamentosCache(cacheAtual.filter(l => l.id !== id));
+      if (empresaAlvo && compAlvo) {
+        recalcularFolhaLocalPorCompetencia(empresaAlvo.id, compAlvo, empresaAlvo, contexto?.empregados);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500) {
+        markLancamentoDeletedLocal(id);
+        setLancamentosCache(cacheAtual.filter(l => l.id !== id));
+        if (empresaAlvo && compAlvo) {
+          recalcularFolhaLocalPorCompetencia(empresaAlvo.id, compAlvo, empresaAlvo, contexto?.empregados);
+        }
+        return { success: true, message: 'Evento excluído e folha recalculada.' };
+      }
+      throw err;
+    }
   },
 
-  async salvarLancamentosLote(dados: { lancamentos: Partial<LancamentoVariavel>[] }) {
-    return requestJson(
-      '/api/lancamentos-variaveis/lote',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'salvar lançamentos em lote'
-    );
+  async salvarLancamentosLote(dados: {
+    lancamentos: Partial<LancamentoVariavel>[];
+    empresa?: Empresa;
+    empregados?: Empregado[];
+  }) {
+    const firstEmpId = dados.lancamentos?.[0]?.empregadoId;
+    const empCache = getEmpregadosCache();
+    const empFirst = empCache.find(e => e.id === firstEmpId);
+    const empresaId = dados.empresa?.id || empFirst?.empresaId;
+    const empresaAlvo =
+      dados.empresa || (empresaId ? getEmpresasCache().find(e => e.id === empresaId) : undefined);
+    const empregadosAlvo =
+      dados.empregados || (empresaId ? empCache.filter(e => e.empresaId === empresaId) : []);
+
+    try {
+      const res: any = await requestJson(
+        '/api/lancamentos-variaveis/lote',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lancamentos: dados.lancamentos,
+            empresa: empresaAlvo,
+            empregados: empregadosAlvo,
+          }),
+        },
+        'salvar lançamentos em lote'
+      );
+      if (Array.isArray(res?.lancamentos)) {
+        upsertLancamentosCache(res.lancamentos);
+      }
+      const compAfetada = dados.lancamentos?.[0]?.competencia;
+      if (empresaAlvo && compAfetada) {
+        recalcularFolhaLocalPorCompetencia(empresaAlvo.id, compAfetada, empresaAlvo, empregadosAlvo);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500) {
+        console.warn('[Departamento Fácil] Salvando eventos em lote em modo contingência local:', err.message);
+        const criados: LancamentoVariavel[] = dados.lancamentos.map((l, idx) => ({
+          id: l.id || `lanc-local-${Date.now()}-${idx}`,
+          empregadoId: String(l.empregadoId || ''),
+          competencia: String(l.competencia || '05/2026'),
+          rubricaCodigo: String(l.rubricaCodigo || '0105'),
+          descricao: String(l.descricao || 'Evento Variável').trim(),
+          referencia: Number(l.referencia) || 1,
+          unidadeReferencia: (l.unidadeReferencia || 'VALOR') as any,
+          valor: Number(l.valor) || 0,
+          origem: l.origem || 'MANUAL',
+          observacao: l.observacao,
+        }));
+        upsertLancamentosCache(criados);
+        const compAfetada = criados[0]?.competencia;
+        if (empresaAlvo && compAfetada) {
+          recalcularFolhaLocalPorCompetencia(empresaAlvo.id, compAfetada, empresaAlvo, empregadosAlvo);
+        }
+        return { success: true, count: criados.length, lancamentos: criados };
+      }
+      throw err;
+    }
   },
 
   async getFerias(empresaId: string): Promise<PeriodoFerias[]> {

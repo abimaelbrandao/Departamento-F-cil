@@ -280,6 +280,62 @@ function salvarDB() {
   }
 }
 
+function parseNumeroSeguro(val: any, fallback: number = 0): number {
+  if (typeof val === 'number') return Number.isFinite(val) ? val : fallback;
+  if (typeof val === 'string') {
+    const cleaned = val.trim().replace(/\s/g, '');
+    if (!cleaned) return fallback;
+    const normalized = cleaned.includes(',') && cleaned.includes('.')
+      ? cleaned.replace(/\./g, '').replace(',', '.')
+      : cleaned.replace(',', '.');
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : fallback;
+  }
+  const num = Number(val);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function sincronizarContextoEmpresaEmpregados(empresaPayload?: any, empregadoPayload?: any, empregadosPayload?: any[]) {
+  if (empresaPayload && empresaPayload.id && !db.empresas.some(e => e.id === empresaPayload.id)) {
+    db.empresas.push(empresaPayload as Empresa);
+  }
+  if (empregadoPayload && empregadoPayload.id && !db.empregados.some(e => e.id === empregadoPayload.id)) {
+    db.empregados.push(empregadoPayload as Empregado);
+  }
+  if (Array.isArray(empregadosPayload)) {
+    for (const empPay of empregadosPayload) {
+      if (empPay && empPay.id && !db.empregados.some(e => e.id === empPay.id)) {
+        db.empregados.push(empPay as Empregado);
+      }
+    }
+  }
+}
+
+function calcularValorLancamentoServidor(
+  emp: Empregado | undefined,
+  rubricaCodigo: string,
+  referencia: number,
+  unidadeReferencia: string,
+  valorInformado: number
+): number {
+  if (valorInformado > 0) return Math.round(valorInformado * 100) / 100;
+  if (!emp) return Math.max(0, Math.round(referencia * 100) / 100);
+
+  const salario = emp.salarioBase || 0;
+  const divisor = emp.divisorHoras || 220;
+  const vh = salario / divisor;
+  const ref = referencia > 0 ? referencia : 1;
+
+  if (rubricaCodigo === '0101') return Math.round(vh * 1.5 * ref * 100) / 100;
+  if (rubricaCodigo === '0102') return Math.round(vh * 2.0 * ref * 100) / 100;
+  if (rubricaCodigo === '0103') return Math.round(vh * 0.2 * ref * 100) / 100;
+  if (rubricaCodigo === '0201') return Math.round((salario / 30) * ref * 100) / 100;
+  if (unidadeReferencia === 'PERCENTUAL') return Math.round(salario * (ref / 100) * 100) / 100;
+  if (unidadeReferencia === 'DIAS') return Math.round((salario / 30) * ref * 100) / 100;
+  if (unidadeReferencia === 'HORAS') return Math.round(vh * ref * 100) / 100;
+  return Math.round(ref * 100) / 100;
+}
+
 // Recalcula e sincroniza folha de pagamento e status da competência em memória/disco
 function recalcularCompetenciaInterna(empresaId: string, competencia: string, empregadoId?: string) {
   const empresa = db.empresas.find(e => e.id === empresaId);
@@ -830,23 +886,22 @@ app.use((req, res, next) => {
         tipoFolha = 'MENSAL',
         empresa: empresaPayload,
         empregados: empregadosPayload,
+        lancamentos: lancamentosPayload,
       } = req.body || {};
 
       if (!empresaId || !competencia) {
         return res.status(400).json({ error: 'Empresa e competência são obrigatórias para calcular a folha.' });
       }
 
-      let empresa = db.empresas.find(e => e.id === empresaId);
-      if (!empresa && empresaPayload && empresaPayload.id === empresaId) {
-        empresa = empresaPayload as Empresa;
-        db.empresas.push(empresa);
-      }
+      sincronizarContextoEmpresaEmpregados(empresaPayload, undefined, empregadosPayload);
+
+      const empresa = db.empresas.find(e => e.id === empresaId);
       if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-      if (Array.isArray(empregadosPayload)) {
-        for (const empPay of empregadosPayload) {
-          if (empPay && empPay.id && empPay.empresaId === empresaId && !db.empregados.some(e => e.id === empPay.id)) {
-            db.empregados.push(empPay as Empregado);
+      if (Array.isArray(lancamentosPayload)) {
+        for (const lPay of lancamentosPayload) {
+          if (lPay && lPay.id && !db.lancamentos.some(l => l.id === lPay.id)) {
+            db.lancamentos.push(lPay as LancamentoVariavel);
           }
         }
       }
@@ -927,23 +982,22 @@ app.use((req, res, next) => {
         empregadoId,
         empresa: empresaPayload,
         empregados: empregadosPayload,
+        lancamentos: lancamentosPayload,
       } = req.body || {};
 
       if (!empresaId || !Array.isArray(competencias) || competencias.length === 0) {
         return res.status(400).json({ error: 'Informe a empresa e ao menos uma competência para gerar a folha em lote.' });
       }
 
-      let empresa = db.empresas.find(e => e.id === empresaId);
-      if (!empresa && empresaPayload && empresaPayload.id === empresaId) {
-        empresa = empresaPayload as Empresa;
-        db.empresas.push(empresa);
-      }
+      sincronizarContextoEmpresaEmpregados(empresaPayload, undefined, empregadosPayload);
+
+      const empresa = db.empresas.find(e => e.id === empresaId);
       if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-      if (Array.isArray(empregadosPayload)) {
-        for (const empPay of empregadosPayload) {
-          if (empPay && empPay.id && empPay.empresaId === empresaId && !db.empregados.some(e => e.id === empPay.id)) {
-            db.empregados.push(empPay as Empregado);
+      if (Array.isArray(lancamentosPayload)) {
+        for (const lPay of lancamentosPayload) {
+          if (lPay && lPay.id && !db.lancamentos.some(l => l.id === lPay.id)) {
+            db.lancamentos.push(lPay as LancamentoVariavel);
           }
         }
       }
@@ -1357,42 +1411,47 @@ app.use((req, res, next) => {
   });
 
   app.post('/api/competencias', (req, res) => {
-    const { empresaId, competencia, tipoFolha = 'MENSAL', parcela13 } = req.body;
-    if (!empresaId || !competencia) {
-      return res.status(400).json({ error: 'Empresa e competência são obrigatórias.' });
+    try {
+      const { empresaId, competencia, tipoFolha = 'MENSAL', parcela13 } = req.body || {};
+      if (!empresaId || !competencia) {
+        return res.status(400).json({ error: 'Empresa e competência são obrigatórias.' });
+      }
+
+      const compKey = `${empresaId}_${competencia}`;
+      let comp = db.competenciasStatus[compKey];
+      if (comp) {
+        return res.json({ existe: true, competencia: comp, message: 'Competência já existente.' });
+      }
+
+      const ativosCount = db.empregados.filter(
+        e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+      ).length;
+
+      comp = {
+        id: `comp-${empresaId}-${String(competencia).replace('/', '')}`,
+        empresaId,
+        competencia,
+        status: 'ABERTA',
+        tipoFolha,
+        parcela13,
+        totalEmpregadosAtivos: ativosCount,
+        totalCalculados: 0,
+        totalProventos: 0,
+        totalDescontos: 0,
+        totalLiquido: 0,
+        totalEncargosEmpresa: 0,
+        totalFGTS: 0,
+        errosBloqueantes: [],
+        alertasRevisao: [],
+      };
+
+      db.competenciasStatus[compKey] = comp;
+      salvarDB();
+      res.status(201).json({ existe: false, competencia: comp });
+    } catch (err: any) {
+      console.error('Erro ao criar competência:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao criar competência.' });
     }
-
-    const compKey = `${empresaId}_${competencia}`;
-    let comp = db.competenciasStatus[compKey];
-    if (comp) {
-      return res.json({ existe: true, competencia: comp, message: 'Competência já existente.' });
-    }
-
-    const ativosCount = db.empregados.filter(
-      e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
-    ).length;
-
-    comp = {
-      id: `comp-${empresaId}-${competencia.replace('/', '')}`,
-      empresaId,
-      competencia,
-      status: 'ABERTA',
-      tipoFolha,
-      parcela13,
-      totalEmpregadosAtivos: ativosCount,
-      totalCalculados: 0,
-      totalProventos: 0,
-      totalDescontos: 0,
-      totalLiquido: 0,
-      totalEncargosEmpresa: 0,
-      totalFGTS: 0,
-      errosBloqueantes: [],
-      alertasRevisao: [],
-    };
-
-    db.competenciasStatus[compKey] = comp;
-    salvarDB();
-    res.status(201).json({ existe: false, competencia: comp });
   });
 
   app.put(['/api/competencias/:empresaId/:competencia', '/api/competencias/:empresaId/:mes/:ano'], (req, res) => {
@@ -1477,130 +1536,251 @@ app.use((req, res, next) => {
   // Lançamentos Variáveis (Eventos na Folha)
   // ==========================================
   app.get('/api/lancamentos-variaveis', (req, res) => {
-    const { competencia, empregadoId, empresaId } = req.query;
-    let list = db.lancamentos;
-    if (competencia) list = list.filter(l => l.competencia === competencia);
-    if (empregadoId) list = list.filter(l => l.empregadoId === empregadoId);
-    if (empresaId) {
-      list = list.filter(l => db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId));
+    try {
+      const { competencia, empregadoId, empresaId } = req.query;
+      let list = db.lancamentos;
+      if (competencia) list = list.filter(l => l.competencia === competencia);
+      if (empregadoId) list = list.filter(l => l.empregadoId === empregadoId);
+      if (empresaId) {
+        list = list.filter(l => db.empregados.some(e => e.id === l.empregadoId && e.empresaId === empresaId));
+      }
+      res.json(list);
+    } catch (err: any) {
+      console.error('Erro ao listar lançamentos:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao listar eventos.' });
     }
-    res.json(list);
   });
 
   app.post('/api/lancamentos-variaveis', (req, res) => {
-    const novo: LancamentoVariavel = {
-      ...req.body,
-      id: `lanc-${Date.now()}`,
-    };
+    try {
+      const {
+        empresa: empresaPayload,
+        empregado: empregadoPayload,
+        empregados: empregadosPayload,
+        ...lancBody
+      } = req.body || {};
 
-    const emp = db.empregados.find(e => e.id === novo.empregadoId);
-    if (emp && (!novo.valor || novo.valor <= 0)) {
-      const salario = emp.salarioBase || 0;
-      const divisor = emp.divisorHoras || 220;
-      const vh = salario / divisor;
-      const ref = novo.referencia || 1;
-      if (novo.rubricaCodigo === '0101') novo.valor = Math.round(vh * 1.5 * ref * 100) / 100;
-      else if (novo.rubricaCodigo === '0102') novo.valor = Math.round(vh * 2.0 * ref * 100) / 100;
-      else if (novo.rubricaCodigo === '0103') novo.valor = Math.round(vh * 0.2 * ref * 100) / 100;
-      else if (novo.rubricaCodigo === '0201') novo.valor = Math.round((salario / 30) * ref * 100) / 100;
+      sincronizarContextoEmpresaEmpregados(empresaPayload, empregadoPayload, empregadosPayload);
+
+      if (!lancBody.empregadoId || !lancBody.competencia) {
+        return res.status(400).json({ error: 'Colaborador e competência são obrigatórios para lançar o evento.' });
+      }
+
+      const emp = db.empregados.find(e => e.id === lancBody.empregadoId);
+      if (emp) {
+        const compStatus = db.competenciasStatus[`${emp.empresaId}_${lancBody.competencia}`];
+        if (compStatus?.status === 'FECHADA') {
+          return res.status(400).json({ error: `A competência ${lancBody.competencia} está FECHADA. Reabra antes de lançar eventos.` });
+        }
+      }
+
+      const refNum = parseNumeroSeguro(lancBody.referencia, 1);
+      const valInformado = parseNumeroSeguro(lancBody.valor, 0);
+      const unidade = (lancBody.unidadeReferencia || 'VALOR') as LancamentoVariavel['unidadeReferencia'];
+      const rubricaCod = String(lancBody.rubricaCodigo || '0105');
+
+      const valorFinal = calcularValorLancamentoServidor(emp, rubricaCod, refNum, unidade, valInformado);
+
+      const novo: LancamentoVariavel = {
+        id: lancBody.id || `lanc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        empregadoId: String(lancBody.empregadoId),
+        competencia: String(lancBody.competencia),
+        rubricaCodigo: rubricaCod,
+        descricao: String(lancBody.descricao || 'Evento Variável').trim(),
+        referencia: refNum,
+        unidadeReferencia: unidade,
+        valor: valorFinal,
+        origem: lancBody.origem || 'MANUAL',
+        comprovanteNome: lancBody.comprovanteNome,
+        observacao: lancBody.observacao,
+      };
+
+      db.lancamentos.push(novo);
+      salvarDB();
+
+      if (emp) {
+        recalcularCompetenciaInterna(emp.empresaId, novo.competencia, emp.id);
+      }
+
+      res.status(201).json(novo);
+    } catch (err: any) {
+      console.error('Erro ao salvar lançamento:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao gravar evento na folha.' });
     }
-
-    db.lancamentos.push(novo);
-    salvarDB();
-
-    if (emp) {
-      recalcularCompetenciaInterna(emp.empresaId, novo.competencia, emp.id);
-    }
-
-    res.status(201).json(novo);
   });
 
   app.put('/api/lancamentos-variaveis/:id', (req, res) => {
-    const idx = db.lancamentos.findIndex(l => l.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+    try {
+      const {
+        empresa: empresaPayload,
+        empregado: empregadoPayload,
+        empregados: empregadosPayload,
+        lancamento: lancPayload,
+        ...updateBody
+      } = req.body || {};
 
-    const lanc = db.lancamentos[idx];
-    const emp = db.empregados.find(e => e.id === lanc.empregadoId);
+      sincronizarContextoEmpresaEmpregados(empresaPayload, empregadoPayload, empregadosPayload);
 
-    let novoValor = req.body.valor !== undefined ? req.body.valor : lanc.valor;
-    if (emp && req.body.referencia !== undefined && (!req.body.valor || req.body.valor <= 0)) {
-      const salario = emp.salarioBase || 0;
-      const divisor = emp.divisorHoras || 220;
-      const vh = salario / divisor;
-      const ref = Number(req.body.referencia);
-      const rubrica = req.body.rubricaCodigo || lanc.rubricaCodigo;
-      if (rubrica === '0101') novoValor = Math.round(vh * 1.5 * ref * 100) / 100;
-      else if (rubrica === '0102') novoValor = Math.round(vh * 2.0 * ref * 100) / 100;
-      else if (rubrica === '0103') novoValor = Math.round(vh * 0.2 * ref * 100) / 100;
-      else if (rubrica === '0201') novoValor = Math.round((salario / 30) * ref * 100) / 100;
+      let idx = db.lancamentos.findIndex(l => l.id === req.params.id);
+      if (idx === -1) {
+        const baseFallback = lancPayload || updateBody;
+        if (baseFallback?.empregadoId && baseFallback?.competencia) {
+          const novoSync: LancamentoVariavel = {
+            id: req.params.id,
+            empregadoId: String(baseFallback.empregadoId),
+            competencia: String(baseFallback.competencia),
+            rubricaCodigo: String(baseFallback.rubricaCodigo || '0105'),
+            descricao: String(baseFallback.descricao || 'Evento Variável').trim(),
+            referencia: parseNumeroSeguro(baseFallback.referencia, 1),
+            unidadeReferencia: (baseFallback.unidadeReferencia || 'VALOR') as any,
+            valor: parseNumeroSeguro(baseFallback.valor, 0),
+            origem: baseFallback.origem || 'MANUAL',
+            observacao: baseFallback.observacao,
+          };
+          db.lancamentos.push(novoSync);
+          idx = db.lancamentos.length - 1;
+        } else {
+          return res.status(404).json({ error: 'Lançamento não encontrado.' });
+        }
+      }
+
+      const lanc = db.lancamentos[idx];
+      const emp = db.empregados.find(e => e.id === lanc.empregadoId);
+
+      if (emp) {
+        const compStatus = db.competenciasStatus[`${emp.empresaId}_${lanc.competencia}`];
+        if (compStatus?.status === 'FECHADA') {
+          return res.status(400).json({ error: `A competência ${lanc.competencia} está FECHADA. Reabra antes de editar eventos.` });
+        }
+      }
+
+      const refNum = updateBody.referencia !== undefined
+        ? parseNumeroSeguro(updateBody.referencia, lanc.referencia)
+        : lanc.referencia;
+      const rubricaCod = String(updateBody.rubricaCodigo || lanc.rubricaCodigo);
+      const unidade = (updateBody.unidadeReferencia || lanc.unidadeReferencia || 'VALOR') as LancamentoVariavel['unidadeReferencia'];
+      const valInformado = updateBody.valor !== undefined ? parseNumeroSeguro(updateBody.valor, 0) : lanc.valor;
+
+      const novoValor =
+        updateBody.valor !== undefined && valInformado > 0
+          ? Math.round(valInformado * 100) / 100
+          : updateBody.referencia !== undefined || updateBody.rubricaCodigo !== undefined || updateBody.unidadeReferencia !== undefined
+          ? calcularValorLancamentoServidor(emp, rubricaCod, refNum, unidade, valInformado)
+          : lanc.valor;
+
+      db.lancamentos[idx] = {
+        ...lanc,
+        ...updateBody,
+        rubricaCodigo: rubricaCod,
+        descricao: updateBody.descricao !== undefined ? String(updateBody.descricao).trim() || lanc.descricao : lanc.descricao,
+        referencia: refNum,
+        unidadeReferencia: unidade,
+        valor: novoValor,
+        id: lanc.id,
+        empregadoId: lanc.empregadoId,
+        competencia: lanc.competencia,
+      };
+      salvarDB();
+
+      if (emp) {
+        recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
+      }
+
+      res.json(db.lancamentos[idx]);
+    } catch (err: any) {
+      console.error('Erro ao editar lançamento:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao editar evento.' });
     }
-
-    db.lancamentos[idx] = {
-      ...lanc,
-      ...req.body,
-      valor: novoValor,
-      id: lanc.id,
-      empregadoId: lanc.empregadoId,
-      competencia: lanc.competencia,
-    };
-    salvarDB();
-
-    if (emp) {
-      recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
-    }
-
-    res.json(db.lancamentos[idx]);
   });
 
   app.delete('/api/lancamentos-variaveis/:id', (req, res) => {
-    const lanc = db.lancamentos.find(l => l.id === req.params.id);
-    if (!lanc) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+    try {
+      const lanc = db.lancamentos.find(l => l.id === req.params.id);
+      if (!lanc) return res.status(404).json({ error: 'Lançamento não encontrado.' });
 
-    const emp = db.empregados.find(e => e.id === lanc.empregadoId);
-    db.lancamentos = db.lancamentos.filter(l => l.id !== req.params.id);
-    salvarDB();
+      const emp = db.empregados.find(e => e.id === lanc.empregadoId);
+      if (emp) {
+        const compStatus = db.competenciasStatus[`${emp.empresaId}_${lanc.competencia}`];
+        if (compStatus?.status === 'FECHADA') {
+          return res.status(400).json({ error: `A competência ${lanc.competencia} está FECHADA. Reabra antes de excluir eventos.` });
+        }
+      }
 
-    if (emp) {
-      recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
+      db.lancamentos = db.lancamentos.filter(l => l.id !== req.params.id);
+      salvarDB();
+
+      if (emp) {
+        recalcularCompetenciaInterna(emp.empresaId, lanc.competencia, emp.id);
+      }
+
+      res.json({ success: true, message: 'Evento excluído e folha recalculada.' });
+    } catch (err: any) {
+      console.error('Erro ao excluir lançamento:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao excluir evento.' });
     }
-
-    res.json({ success: true, message: 'Evento excluído e folha recalculada.' });
   });
 
   app.post('/api/lancamentos-variaveis/lote', (req, res) => {
-    const { lancamentos } = req.body;
-    if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
-      return res.status(400).json({ error: 'Nenhum lançamento fornecido.' });
-    }
+    try {
+      const {
+        lancamentos,
+        empresa: empresaPayload,
+        empregados: empregadosPayload,
+      } = req.body || {};
 
-    const criados: LancamentoVariavel[] = [];
-    const empIdsAfetados = new Set<string>();
-    let compAfetada = '';
-    let empresaIdAfetada = '';
+      sincronizarContextoEmpresaEmpregados(empresaPayload, undefined, empregadosPayload);
 
-    for (const l of lancamentos) {
-      const novo: LancamentoVariavel = {
-        ...l,
-        id: `lanc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      };
-      db.lancamentos.push(novo);
-      criados.push(novo);
-      empIdsAfetados.add(novo.empregadoId);
-      compAfetada = novo.competencia;
-
-      const emp = db.empregados.find(e => e.id === novo.empregadoId);
-      if (emp) empresaIdAfetada = emp.empresaId;
-    }
-
-    salvarDB();
-
-    if (empresaIdAfetada && compAfetada) {
-      for (const empId of empIdsAfetados) {
-        recalcularCompetenciaInterna(empresaIdAfetada, compAfetada, empId);
+      if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
+        return res.status(400).json({ error: 'Nenhum lançamento fornecido.' });
       }
-    }
 
-    res.status(201).json({ success: true, count: criados.length, lancamentos: criados });
+      const criados: LancamentoVariavel[] = [];
+      const empIdsAfetados = new Set<string>();
+      let compAfetada = '';
+      let empresaIdAfetada = '';
+
+      for (const l of lancamentos) {
+        const emp = db.empregados.find(e => e.id === l.empregadoId);
+        const refNum = parseNumeroSeguro(l.referencia, 1);
+        const valInformado = parseNumeroSeguro(l.valor, 0);
+        const unidade = (l.unidadeReferencia || 'VALOR') as LancamentoVariavel['unidadeReferencia'];
+        const rubricaCod = String(l.rubricaCodigo || '0105');
+        const valorFinal = calcularValorLancamentoServidor(emp, rubricaCod, refNum, unidade, valInformado);
+
+        const novo: LancamentoVariavel = {
+          id: l.id || `lanc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          empregadoId: String(l.empregadoId),
+          competencia: String(l.competencia),
+          rubricaCodigo: rubricaCod,
+          descricao: String(l.descricao || 'Evento Variável').trim(),
+          referencia: refNum,
+          unidadeReferencia: unidade,
+          valor: valorFinal,
+          origem: l.origem || 'MANUAL',
+          comprovanteNome: l.comprovanteNome,
+          observacao: l.observacao,
+        };
+        db.lancamentos.push(novo);
+        criados.push(novo);
+        empIdsAfetados.add(novo.empregadoId);
+        compAfetada = novo.competencia;
+
+        if (emp) empresaIdAfetada = emp.empresaId;
+      }
+
+      salvarDB();
+
+      if (empresaIdAfetada && compAfetada) {
+        for (const empId of empIdsAfetados) {
+          recalcularCompetenciaInterna(empresaIdAfetada, compAfetada, empId);
+        }
+      }
+
+      res.status(201).json({ success: true, count: criados.length, lancamentos: criados });
+    } catch (err: any) {
+      console.error('Erro ao salvar lançamentos em lote:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao gravar eventos em lote.' });
+    }
   });
 
   // Férias: Consulta e Programação
