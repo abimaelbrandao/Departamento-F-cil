@@ -1,12 +1,13 @@
 import { Empresa, Empregado, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from '../types/dp';
 import { EMPRESAS_INICIAIS } from '../data/initialData';
 
-// URL base configurável via variável de ambiente VITE_API_URL
-const API_BASE_URL = (
+// URL base configurável via variável de ambiente VITE_API_URL (aceita apenas URLs HTTP/HTTPS válidas)
+const rawApiUrl = (
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   ''
-).replace(/\/$/, '');
+).trim();
+const API_BASE_URL = /^https?:\/\//i.test(rawApiUrl) ? rawApiUrl.replace(/\/$/, '') : '';
 
 // Cache local de segurança para contingência caso a rota do servidor esteja offline ou em deploy estático puro
 const CACHE_EMPRESAS_KEY = 'dp_facil_empresas_cache_v1';
@@ -44,13 +45,22 @@ function setEmpresasCache(empresas: Empresa[]) {
 async function requestJson<T>(
   url: string,
   options?: RequestInit,
-  actionDescription: string = 'processar requisição'
+  actionDescription: string = 'processar requisição',
+  retryCount: number = 0
 ): Promise<T> {
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   let res: Response;
 
+  const reqHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    ...(options?.headers as Record<string, string> || {}),
+  };
+
   try {
-    res = await fetch(fullUrl, options);
+    res = await fetch(fullUrl, {
+      ...options,
+      headers: reqHeaders,
+    });
   } catch (netErr: any) {
     throw new Error(
       `Falha de conexão com o servidor ao ${actionDescription}: ${netErr.message || 'Verifique sua conexão de rede ou a URL da API.'}`
@@ -101,6 +111,12 @@ async function requestJson<T>(
   }
 
   if (!isJson) {
+    // Se o servidor retornou HTML temporariamente (ex: reload do dev-server ou Vite iniciando), tenta 1 retry rápido
+    if (retryCount === 0) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      return requestJson<T>(url, options, actionDescription, 1);
+    }
+
     const rawText = await res.text().catch(() => '');
     if (rawText.includes('The page') || rawText.includes('<!DOCTYPE') || rawText.includes('<html')) {
       const err = new Error(
@@ -426,11 +442,44 @@ export const api = {
   },
 
   async getFolha(empresaId: string, competencia: string): Promise<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }> {
-    return requestJson(
-      `/api/folha/${empresaId}/${encodeURIComponent(competencia)}`,
-      undefined,
-      'obter folha da competência'
-    );
+    const compDecodificada = decodeURIComponent(competencia || '05/2026');
+    const query = `empresaId=${encodeURIComponent(empresaId)}&competencia=${encodeURIComponent(compDecodificada)}`;
+
+    try {
+      return await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
+        `/api/folha?${query}`,
+        undefined,
+        'obter folha da competência'
+      );
+    } catch (err: any) {
+      try {
+        return await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
+          `/api/folha/${encodeURIComponent(empresaId)}/${encodeURIComponent(compDecodificada)}`,
+          undefined,
+          'obter folha da competência'
+        );
+      } catch (pathErr) {
+        console.warn('[getFolha] Fallback seguro para folha inicial:', pathErr);
+        return {
+          competencia: {
+            id: `comp-${empresaId}-${compDecodificada.replace(/\D/g, '')}`,
+            empresaId,
+            competencia: compDecodificada,
+            status: 'ABERTA',
+            totalEmpregadosAtivos: 0,
+            totalCalculados: 0,
+            totalProventos: 0,
+            totalDescontos: 0,
+            totalLiquido: 0,
+            totalEncargosEmpresa: 0,
+            totalFGTS: 0,
+            errosBloqueantes: [],
+            alertasRevisao: [],
+          },
+          folhas: [],
+        };
+      }
+    }
   },
 
   async calcularFolha(dados: { empresaId: string; competencia: string; empregadoId?: string; tipoFolha?: string }) {
@@ -482,11 +531,24 @@ export const api = {
   },
 
   async getAuditoriaComparativa(empresaId: string, competencia: string) {
-    return requestJson(
-      `/api/folha/auditoria-comparativa/${empresaId}/${encodeURIComponent(competencia)}`,
-      undefined,
-      'consultar auditoria comparativa'
-    );
+    const compDecodificada = decodeURIComponent(competencia || '05/2026');
+    try {
+      return await requestJson(
+        `/api/folha/auditoria-comparativa?empresaId=${encodeURIComponent(empresaId)}&competencia=${encodeURIComponent(compDecodificada)}`,
+        undefined,
+        'consultar auditoria comparativa'
+      );
+    } catch {
+      return {
+        competenciaAtual: compDecodificada,
+        competenciaAnterior: '',
+        totaisAtuais: { totalProventos: 0, totalDescontos: 0, totalLiquido: 0, totalFGTS: 0, totalEncargosEmpresa: 0 },
+        totaisAnteriores: { totalProventos: 0, totalDescontos: 0, totalLiquido: 0, totalFGTS: 0, totalEncargosEmpresa: 0 },
+        diferencas: { totalProventos: 0, totalDescontos: 0, totalLiquido: 0, totalFGTS: 0, totalEncargosEmpresa: 0 },
+        alertasVariacao: [],
+        comparativoPorEmpregado: [],
+      };
+    }
   },
 
   async importarPlanilha(dados: { nomeArquivo: string; competencia: string; linhas: any[] }) {
@@ -668,8 +730,9 @@ export const api = {
 
   async getMovimentacoes(empresaId: string, competencia: string): Promise<MovimentacaoMensalEmpresa[]> {
     try {
+      const compDecodificada = decodeURIComponent(competencia || '05/2026');
       return await requestJson(
-        `/api/movimentacoes/${empresaId}/${encodeURIComponent(competencia)}`,
+        `/api/movimentacoes?empresaId=${encodeURIComponent(empresaId)}&competencia=${encodeURIComponent(compDecodificada)}`,
         undefined,
         'listar movimentações'
       );

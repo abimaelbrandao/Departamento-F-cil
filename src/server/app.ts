@@ -684,12 +684,25 @@ app.use(express.json({ limit: '10mb' }));
   });
 
   // Folha de Pagamento: Consulta de competência
-  app.get(['/api/folha/:empresaId/:competencia', '/api/folha/:empresaId/:mes/:ano'], (req, res) => {
-    const { empresaId } = req.params;
-    const competencia = req.params.competencia ? decodeURIComponent(req.params.competencia) : `${req.params.mes}/${req.params.ano}`;
-    const folhas = db.folhasCalculadas.filter(
-      f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
-    );
+  app.get(
+    [
+      '/api/folha',
+      '/api/folha/:empresaId',
+      '/api/folha/:empresaId/:competencia',
+      '/api/folha/:empresaId/:mes/:ano',
+    ],
+    (req, res) => {
+      const empresaId = req.params.empresaId || (req.query.empresaId as string) || '';
+      let competencia = req.params.competencia || (req.query.competencia as string) || '';
+      if (!competencia && req.params.mes && req.params.ano) {
+        competencia = `${req.params.mes}/${req.params.ano}`;
+      }
+      if (competencia) {
+        competencia = decodeURIComponent(competencia);
+      }
+      const folhas = db.folhasCalculadas.filter(
+        f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
+      );
 
     const compKey = `${empresaId}_${competencia}`;
     let compStatus = db.competenciasStatus[compKey];
@@ -881,20 +894,34 @@ app.use(express.json({ limit: '10mb' }));
   });
 
   // Auditoria Comparativa: Folha Atual vs Mês Anterior
-  app.get('/api/folha/auditoria-comparativa/:empresaId/:competencia', (req, res) => {
-    const { empresaId, competencia } = req.params;
+  app.get(
+    [
+      '/api/folha/auditoria-comparativa',
+      '/api/folha/auditoria-comparativa/:empresaId',
+      '/api/folha/auditoria-comparativa/:empresaId/:competencia',
+      '/api/folha/auditoria-comparativa/:empresaId/:mes/:ano',
+    ],
+    (req, res) => {
+      const empresaId = req.params.empresaId || (req.query.empresaId as string) || '';
+      let competencia = req.params.competencia || (req.query.competencia as string) || '';
+      if (!competencia && req.params.mes && req.params.ano) {
+        competencia = `${req.params.mes}/${req.params.ano}`;
+      }
+      if (competencia) {
+        competencia = decodeURIComponent(competencia);
+      }
 
-    // Calcula mês anterior (MM/YYYY)
-    const [mesStr, anoStr] = competencia.split('/');
-    let mes = parseInt(mesStr, 10);
-    let ano = parseInt(anoStr, 10);
-    if (mes === 1) {
-      mes = 12;
-      ano -= 1;
-    } else {
-      mes -= 1;
-    }
-    const compAnterior = `${String(mes).padStart(2, '0')}/${ano}`;
+      // Calcula mês anterior (MM/YYYY)
+      const partes = (competencia || '').split('/');
+      let mes = parseInt(partes[0] || '5', 10);
+      let ano = parseInt(partes[1] || '2026', 10);
+      if (mes === 1) {
+        mes = 12;
+        ano -= 1;
+      } else {
+        mes -= 1;
+      }
+      const compAnterior = `${String(mes).padStart(2, '0')}/${ano}`;
 
     const folhasAtuais = db.folhasCalculadas.filter(
       f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
@@ -1440,12 +1467,28 @@ app.use(express.json({ limit: '10mb' }));
   });
 
   // Movimentações Mensais (Empresa enviando ao DP)
-  app.get('/api/movimentacoes/:empresaId/:competencia', (req, res) => {
-    const list = db.movimentacoes.filter(
-      m => m.empresaId === req.params.empresaId && m.competencia === req.params.competencia
-    );
-    res.json(list);
-  });
+  app.get(
+    [
+      '/api/movimentacoes',
+      '/api/movimentacoes/:empresaId',
+      '/api/movimentacoes/:empresaId/:competencia',
+      '/api/movimentacoes/:empresaId/:mes/:ano',
+    ],
+    (req, res) => {
+      const empresaId = req.params.empresaId || (req.query.empresaId as string) || '';
+      let competencia = req.params.competencia || (req.query.competencia as string) || '';
+      if (!competencia && req.params.mes && req.params.ano) {
+        competencia = `${req.params.mes}/${req.params.ano}`;
+      }
+      if (competencia) {
+        competencia = decodeURIComponent(competencia);
+      }
+      const list = db.movimentacoes.filter(
+        m => (!empresaId || m.empresaId === empresaId) && (!competencia || m.competencia === competencia)
+      );
+      res.json(list);
+    }
+  );
 
   app.post('/api/movimentacoes', (req, res) => {
     const nova: MovimentacaoMensalEmpresa = {
