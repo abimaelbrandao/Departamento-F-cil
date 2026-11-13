@@ -45,6 +45,7 @@ import { CompanyManagementModal } from './components/CompanyManagementModal';
 import { CompetenceModal } from './components/CompetenceModal';
 import { AddEventModal } from './components/AddEventModal';
 import { EmployeeActionModal } from './components/EmployeeActionModal';
+import { BatchPayrollModal } from './components/BatchPayrollModal';
 import {
   Building2,
   Users,
@@ -147,11 +148,13 @@ export default function App() {
   const [menuEmpresasAberto, setMenuEmpresasAberto] = useState(false);
   const [bannerEmpresaRecemCriada, setBannerEmpresaRecemCriada] = useState<Empresa | null>(null);
 
-  // Gestão de Competências
+  // Gestão de Competências & Geração de Folha (Individual ou em Lote)
   const [modalCompetenciasAberto, setModalCompetenciasAberto] = useState(false);
   const [modoCompetenciaInicial, setModoCompetenciaInicial] = useState<'LISTA' | 'NOVA'>('LISTA');
   const [listaCompetencias, setListaCompetencias] = useState<CompetenciaFolha[]>([]);
   const [menuCompetenciasAberto, setMenuCompetenciasAberto] = useState(false);
+  const [modalGerarFolhaAberto, setModalGerarFolhaAberto] = useState(false);
+  const [modoGerarFolhaInicial, setModoGerarFolhaInicial] = useState<'INDIVIDUAL' | 'LOTE'>('LOTE');
 
   // Lançamentos Variáveis e Eventos
   const [modalAddEventAberto, setModalAddEventAberto] = useState(false);
@@ -840,6 +843,17 @@ export default function App() {
                           <Settings className="w-3.5 h-3.5 text-slate-400" />
                           Gerenciar competências
                         </button>
+                        <button
+                          onClick={() => {
+                            setMenuCompetenciasAberto(false);
+                            setModoGerarFolhaInicial('LOTE');
+                            setModalGerarFolhaAberto(true);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-indigo-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          Gerar folha (Individual / Lote)
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1284,14 +1298,27 @@ export default function App() {
                         A competência {competenciaAtiva} está aberta, mas os valores ainda não foram apurados para os {empregados.length} empregados cadastrados. Inicie o cálculo para gerar as rubricas, INSS progressivo e encargos.
                       </p>
                     </div>
-                    <button
-                      onClick={handleCalcularFolhaCompleta}
-                      disabled={processandoFolha}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50"
-                    >
-                      <Calculator className="w-4 h-4" />
-                      {processandoFolha ? 'Processando cálculo...' : `Calcular Folha de ${competenciaAtiva}`}
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2.5">
+                      <button
+                        onClick={handleCalcularFolhaCompleta}
+                        disabled={processandoFolha}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                      >
+                        <Calculator className="w-4 h-4" />
+                        {processandoFolha ? 'Processando cálculo...' : `Calcular Folha de ${competenciaAtiva}`}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setModoGerarFolhaInicial('LOTE');
+                          setModalGerarFolhaAberto(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all"
+                      >
+                        <Layers className="w-4 h-4" />
+                        Gerar em Lote / Outra Competência
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1373,14 +1400,26 @@ export default function App() {
                           Enviar Folha para Conferência
                         </button>
                       ) : (
-                        <button
-                          onClick={handleCalcularFolhaCompleta}
-                          disabled={processandoFolha}
-                          className="w-full sm:w-auto flex items-center justify-center gap-2 py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
-                        >
-                          <Calculator className="w-4 h-4" />
-                          {processandoFolha ? 'Processando...' : 'Calcular Folha Completa'}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                          <button
+                            onClick={handleCalcularFolhaCompleta}
+                            disabled={processandoFolha}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+                          >
+                            <Calculator className="w-4 h-4" />
+                            {processandoFolha ? 'Processando...' : 'Calcular Folha Completa'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModoGerarFolhaInicial('LOTE');
+                              setModalGerarFolhaAberto(true);
+                            }}
+                            className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-colors"
+                          >
+                            <Layers className="w-4 h-4" />
+                            Gerar em Lote / Competência
+                          </button>
+                        </div>
                       )
                     )}
 
@@ -1631,10 +1670,22 @@ export default function App() {
                   </button>
 
                   <button
+                    onClick={() => {
+                      setModoGerarFolhaInicial('LOTE');
+                      setModalGerarFolhaAberto(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                    title="Gerar folha de pagamento por competência ou em lote para múltiplos meses"
+                  >
+                    <Layers className="w-4 h-4" />
+                    Gerar Folha (Competência / Lote)
+                  </button>
+
+                  <button
                     onClick={handleCalcularFolhaCompleta}
                     disabled={processandoFolha || statusComp === 'FECHADA'}
                     className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors disabled:opacity-50"
-                    title="Recalcular todas as verbas e tributos"
+                    title="Recalcular todas as verbas e tributos da competência ativa"
                   >
                     <Calculator className="w-4 h-4" />
                     {processandoFolha ? 'Recalculando...' : 'Recalcular'}
@@ -3255,6 +3306,32 @@ export default function App() {
             await carregarCompetencias(empresaAtivaId);
             await carregarDadosCompetencia();
           }
+        }}
+        onAbrirGeracaoFolhaLote={() => {
+          setModoGerarFolhaInicial('LOTE');
+          setModalGerarFolhaAberto(true);
+        }}
+      />
+
+      {/* 13b. Modal de Geração de Folha (Por Competência Individual ou Em Lote) */}
+      <BatchPayrollModal
+        isOpen={modalGerarFolhaAberto}
+        onClose={() => setModalGerarFolhaAberto(false)}
+        empresa={empresaAtiva || EMPRESA_PADRAO}
+        empregados={empregados}
+        competenciaAtual={competenciaAtiva}
+        competenciasExistentes={listaCompetencias}
+        modoInicial={modoGerarFolhaInicial}
+        onSelecionarCompetencia={(comp) => {
+          setCompetenciaAtiva(comp);
+          setAbaNavegacao('FOLHA');
+        }}
+        onFolhaProcessada={async () => {
+          if (empresaAtivaId) {
+            await carregarCompetencias(empresaAtivaId);
+          }
+          await carregarDadosCompetencia();
+          mostrarNotificacao('Folha de pagamento processada e gravada com sucesso!', 'sucesso');
         }}
       />
 

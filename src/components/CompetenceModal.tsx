@@ -25,6 +25,7 @@ interface Props {
   onSelecionarCompetencia: (competencia: string) => void;
   onCompetenciasAtualizadas: () => void;
   abrirCadastroDireto?: boolean;
+  onAbrirGeracaoFolhaLote?: () => void;
 }
 
 export const CompetenceModal: React.FC<Props> = ({
@@ -35,6 +36,7 @@ export const CompetenceModal: React.FC<Props> = ({
   onSelecionarCompetencia,
   onCompetenciasAtualizadas,
   abrirCadastroDireto = false,
+  onAbrirGeracaoFolhaLote,
 }) => {
   const [modo, setModo] = useState<'LISTA' | 'NOVA'>(abrirCadastroDireto ? 'NOVA' : 'LISTA');
   const [competencias, setCompetencias] = useState<CompetenciaFolha[]>([]);
@@ -176,6 +178,20 @@ export const CompetenceModal: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onAbrirGeracaoFolhaLote && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onAbrirGeracaoFolhaLote();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold transition-colors"
+                title="Gerar folha de pagamento por competência ou em lote"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Gerar Folha (Lote)</span>
+              </button>
+            )}
             {modo === 'NOVA' ? (
               <button
                 type="button"

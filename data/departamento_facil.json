@@ -2832,6 +2832,15 @@
   ],
   "esocial": [
     {
+      "id": "es-1200-1794588600963",
+      "codigoEvento": "S-1200",
+      "descricao": "Remuneração de Trabalhador - Competência 11/2026",
+      "competencia": "11/2026",
+      "statusEnvio": "GERADO",
+      "dataTransmissao": "2026-11-13T16:50:00.963Z",
+      "arquivoXmlSimulado": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><eSocial><evtRemun><idePeriodo>11/2026</idePeriodo></evtRemun></eSocial>"
+    },
+    {
       "id": "es-2299-1794587771403",
       "codigoEvento": "S-2299",
       "descricao": "Desligamento do Trabalhador - Lucas Gabriel de Albuquerque",
@@ -2891,6 +2900,59 @@
     "import_folha_ponto_abril_2026.csv"
   ],
   "auditoriaLogs": [
+    {
+      "id": "log-1794588600980",
+      "dataHora": "2026-11-13T16:50:00.980Z",
+      "usuario": "Teste",
+      "acao": "REABERTURA_FOLHA",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "competencia": "11/2026",
+        "motivo": "Limpeza teste"
+      }
+    },
+    {
+      "id": "log-lote-1794588600970",
+      "dataHora": "2026-11-13T16:50:00.970Z",
+      "usuario": "Operador DP",
+      "acao": "CALCULO_FOLHA_LOTE",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "competencias": [
+          "11/2026",
+          "12/2026"
+        ],
+        "processadas": 1,
+        "ignoradasFechadas": 1
+      }
+    },
+    {
+      "id": "log-1794588600963",
+      "dataHora": "2026-11-13T16:50:00.963Z",
+      "usuario": "Teste",
+      "acao": "FECHAMENTO_FOLHA",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "competencia": "11/2026",
+        "totalLiquido": 27632.05
+      }
+    },
+    {
+      "id": "log-lote-1794588592932",
+      "dataHora": "2026-11-13T16:49:52.932Z",
+      "usuario": "Operador DP",
+      "acao": "CALCULO_FOLHA_LOTE",
+      "detalhes": {
+        "empresaId": "emp-1",
+        "competencias": [
+          "07/2026",
+          "08/2026",
+          "13/2026"
+        ],
+        "processadas": 3,
+        "ignoradasFechadas": 0
+      }
+    },
     {
       "id": "log-cancel-resc-1794587771415",
       "dataHora": "2026-11-13T16:36:11.415Z",

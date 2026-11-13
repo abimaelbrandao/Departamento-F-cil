@@ -822,68 +822,248 @@ app.use((req, res, next) => {
 
   // Processar ou Reprocessar Folha (Individual, Grupo ou Toda a Empresa)
   app.post('/api/folha/calcular', (req, res) => {
-    const { empresaId, competencia, empregadoId, tipoFolha = 'MENSAL' } = req.body;
-    const empresa = db.empresas.find(e => e.id === empresaId);
-    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
+    try {
+      const {
+        empresaId,
+        competencia,
+        empregadoId,
+        tipoFolha = 'MENSAL',
+        empresa: empresaPayload,
+        empregados: empregadosPayload,
+      } = req.body || {};
 
-    const compKey = `${empresaId}_${competencia}`;
-    const compStatus = db.competenciasStatus[compKey];
-    if (compStatus && compStatus.status === 'FECHADA') {
-      return res.status(400).json({ error: 'Esta competência está FECHADA. É obrigatório reabrir antes de recalcular.' });
-    }
+      if (!empresaId || !competencia) {
+        return res.status(400).json({ error: 'Empresa e competência são obrigatórias para calcular a folha.' });
+      }
 
-    let empregadosParaCalcular = db.empregados.filter(e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado');
-    if (empregadoId) {
-      empregadosParaCalcular = empregadosParaCalcular.filter(e => e.id === empregadoId);
-    }
+      let empresa = db.empresas.find(e => e.id === empresaId);
+      if (!empresa && empresaPayload && empresaPayload.id === empresaId) {
+        empresa = empresaPayload as Empresa;
+        db.empresas.push(empresa);
+      }
+      if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-    const novasFolhas: FolhaEmpregado[] = [];
+      if (Array.isArray(empregadosPayload)) {
+        for (const empPay of empregadosPayload) {
+          if (empPay && empPay.id && empPay.empresaId === empresaId && !db.empregados.some(e => e.id === empPay.id)) {
+            db.empregados.push(empPay as Empregado);
+          }
+        }
+      }
 
-    for (const emp of empregadosParaCalcular) {
-      // Busca lançamentos variáveis desta competência para o empregado
-      const lancs = db.lancamentos.filter(l => l.empregadoId === emp.id && l.competencia === competencia);
-      const folha = processarFolhaEmpregado(emp, empresa, competencia, lancs, tipoFolha);
+      const compKey = `${empresaId}_${competencia}`;
+      const compStatus = db.competenciasStatus[compKey];
+      if (compStatus && compStatus.status === 'FECHADA') {
+        return res.status(400).json({ error: 'Esta competência está FECHADA. É obrigatório reabrir antes de recalcular.' });
+      }
 
-      // Remove folha anterior se já calculada
-      db.folhasCalculadas = db.folhasCalculadas.filter(
-        f => !(f.empregadoId === emp.id && f.competencia === competencia && f.tipoFolha === tipoFolha)
+      let empregadosParaCalcular = db.empregados.filter(
+        e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+      );
+      if (empregadoId) {
+        empregadosParaCalcular = empregadosParaCalcular.filter(e => e.id === empregadoId);
+      }
+
+      const novasFolhas: FolhaEmpregado[] = [];
+
+      for (const emp of empregadosParaCalcular) {
+        const lancs = db.lancamentos.filter(l => l.empregadoId === emp.id && l.competencia === competencia);
+        const folha = processarFolhaEmpregado(emp, empresa, competencia, lancs, tipoFolha);
+
+        db.folhasCalculadas = db.folhasCalculadas.filter(
+          f => !(f.empregadoId === emp.id && f.competencia === competencia && f.tipoFolha === folha.tipoFolha)
+        );
+
+        db.folhasCalculadas.push(folha);
+        novasFolhas.push(folha);
+      }
+
+      const todasFolhasComp = db.folhasCalculadas.filter(
+        f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
       );
 
-      db.folhasCalculadas.push(folha);
-      novasFolhas.push(folha);
+      const ativosCount = db.empregados.filter(
+        e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+      ).length;
+      const erros: string[] = [];
+      const alertas: string[] = [];
+
+      if (todasFolhasComp.length < ativosCount) {
+        alertas.push(`Existem ${ativosCount - todasFolhasComp.length} colaborador(es) ativo(s) sem cálculo na competência.`);
+      }
+
+      db.competenciasStatus[compKey] = {
+        id: compStatus?.id || `comp-${empresaId}-${competencia.replace(/\D/g, '')}`,
+        empresaId,
+        competencia,
+        status: compStatus?.status === 'FECHADA' ? 'FECHADA' : 'EM_CONFERENCIA',
+        tipoFolha: compStatus?.tipoFolha || tipoFolha,
+        totalEmpregadosAtivos: ativosCount,
+        totalCalculados: todasFolhasComp.length,
+        totalProventos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+        totalDescontos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+        totalLiquido: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+        totalEncargosEmpresa: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+        totalFGTS: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+        errosBloqueantes: erros,
+        alertasRevisao: alertas,
+      };
+
+      salvarDB();
+      res.json({ success: true, calculadas: novasFolhas, competenciaStatus: db.competenciasStatus[compKey] });
+    } catch (err: any) {
+      console.error('Erro ao calcular folha:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao processar cálculo da folha.' });
     }
+  });
 
-    // Atualiza status da competência
-    const todasFolhasComp = db.folhasCalculadas.filter(
-      f => f.competencia === competencia && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
-    );
+  // Processar Folha de Pagamento em Lote para múltiplas competências
+  app.post('/api/folha/calcular-lote', (req, res) => {
+    try {
+      const {
+        empresaId,
+        competencias,
+        tipoFolha = 'MENSAL',
+        empregadoId,
+        empresa: empresaPayload,
+        empregados: empregadosPayload,
+      } = req.body || {};
 
-    const ativosCount = db.empregados.filter(e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado').length;
-    const erros: string[] = [];
-    const alertas: string[] = [];
+      if (!empresaId || !Array.isArray(competencias) || competencias.length === 0) {
+        return res.status(400).json({ error: 'Informe a empresa e ao menos uma competência para gerar a folha em lote.' });
+      }
 
-    if (todasFolhasComp.length < ativosCount) {
-      alertas.push(`Existem ${ativosCount - todasFolhasComp.length} colaborador(es) ativo(s) sem cálculo na competência.`);
+      let empresa = db.empresas.find(e => e.id === empresaId);
+      if (!empresa && empresaPayload && empresaPayload.id === empresaId) {
+        empresa = empresaPayload as Empresa;
+        db.empresas.push(empresa);
+      }
+      if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
+
+      if (Array.isArray(empregadosPayload)) {
+        for (const empPay of empregadosPayload) {
+          if (empPay && empPay.id && empPay.empresaId === empresaId && !db.empregados.some(e => e.id === empPay.id)) {
+            db.empregados.push(empPay as Empregado);
+          }
+        }
+      }
+
+      let empregadosParaCalcular = db.empregados.filter(
+        e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+      );
+      if (empregadoId) {
+        empregadosParaCalcular = empregadosParaCalcular.filter(e => e.id === empregadoId);
+      }
+
+      const ativosCount = db.empregados.filter(
+        e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
+      ).length;
+
+      const competenciasUnicas: string[] = Array.from(
+        new Set(competencias.map((c: any) => String(c || '').trim()).filter(Boolean))
+      );
+
+      const resultados: Array<{
+        competencia: string;
+        status: 'PROCESSADA' | 'IGNORADA_FECHADA';
+        competenciaStatus: CompetenciaFolha;
+        folhas: FolhaEmpregado[];
+        mensagem: string;
+      }> = [];
+
+      let processadas = 0;
+      let ignoradasFechadas = 0;
+
+      for (const compStr of competenciasUnicas) {
+        const compKey = `${empresaId}_${compStr}`;
+        const existente = db.competenciasStatus[compKey];
+
+        if (existente && existente.status === 'FECHADA') {
+          ignoradasFechadas++;
+          const folhasExistentes = db.folhasCalculadas.filter(
+            f => f.competencia === compStr && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
+          );
+          resultados.push({
+            competencia: compStr,
+            status: 'IGNORADA_FECHADA',
+            competenciaStatus: existente,
+            folhas: folhasExistentes,
+            mensagem: 'Competência fechada (mantida sem alteração).',
+          });
+          continue;
+        }
+
+        const novasFolhas: FolhaEmpregado[] = [];
+        for (const emp of empregadosParaCalcular) {
+          const lancs = db.lancamentos.filter(l => l.empregadoId === emp.id && l.competencia === compStr);
+          const folha = processarFolhaEmpregado(emp, empresa, compStr, lancs, tipoFolha);
+
+          db.folhasCalculadas = db.folhasCalculadas.filter(
+            f => !(f.empregadoId === emp.id && f.competencia === compStr && f.tipoFolha === folha.tipoFolha)
+          );
+
+          db.folhasCalculadas.push(folha);
+          novasFolhas.push(folha);
+        }
+
+        const todasFolhasComp = db.folhasCalculadas.filter(
+          f => f.competencia === compStr && db.empregados.some(e => e.id === f.empregadoId && e.empresaId === empresaId)
+        );
+
+        const alertas: string[] = [];
+        if (todasFolhasComp.length < ativosCount) {
+          alertas.push(`Existem ${ativosCount - todasFolhasComp.length} colaborador(es) ativo(s) sem cálculo na competência.`);
+        }
+
+        const compAtualizada: CompetenciaFolha = {
+          id: existente?.id || `comp-${empresaId}-${compStr.replace(/\D/g, '')}`,
+          empresaId,
+          competencia: compStr,
+          status: 'EM_CONFERENCIA',
+          tipoFolha: existente?.tipoFolha || tipoFolha,
+          totalEmpregadosAtivos: ativosCount,
+          totalCalculados: todasFolhasComp.length,
+          totalProventos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+          totalDescontos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+          totalLiquido: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+          totalEncargosEmpresa: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+          totalFGTS: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+          errosBloqueantes: [],
+          alertasRevisao: alertas,
+        };
+
+        db.competenciasStatus[compKey] = compAtualizada;
+        processadas++;
+
+        resultados.push({
+          competencia: compStr,
+          status: 'PROCESSADA',
+          competenciaStatus: compAtualizada,
+          folhas: todasFolhasComp,
+          mensagem: `${todasFolhasComp.length} colaborador(es) calculado(s).`,
+        });
+      }
+
+      db.auditoriaLogs.unshift({
+        id: `log-lote-${Date.now()}`,
+        dataHora: new Date().toISOString(),
+        usuario: 'Operador DP',
+        acao: 'CALCULO_FOLHA_LOTE',
+        detalhes: { empresaId, competencias: competenciasUnicas, processadas, ignoradasFechadas },
+      });
+
+      salvarDB();
+      res.json({
+        success: true,
+        totalCompetencias: competenciasUnicas.length,
+        processadas,
+        ignoradasFechadas,
+        resultados,
+      });
+    } catch (err: any) {
+      console.error('Erro ao calcular folha em lote:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao processar folha em lote.' });
     }
-
-    db.competenciasStatus[compKey] = {
-      id: compStatus?.id || `comp-${empresaId}-${competencia.replace('/', '')}`,
-      empresaId,
-      competencia,
-      status: compStatus?.status === 'FECHADA' ? 'FECHADA' : 'EM_CONFERENCIA',
-      totalEmpregadosAtivos: ativosCount,
-      totalCalculados: todasFolhasComp.length,
-      totalProventos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
-      totalDescontos: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
-      totalLiquido: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
-      totalEncargosEmpresa: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
-      totalFGTS: Math.round(todasFolhasComp.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
-      errosBloqueantes: erros,
-      alertasRevisao: alertas,
-    };
-
-    salvarDB();
-    res.json({ success: true, calculadas: novasFolhas, competenciaStatus: db.competenciasStatus[compKey] });
   });
 
   // Aprovar e Fechar Competência

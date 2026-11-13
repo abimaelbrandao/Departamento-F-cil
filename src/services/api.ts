@@ -2,6 +2,23 @@ import { Empresa, Empregado, FolhaEmpregado, CompetenciaFolha, LancamentoVariave
 import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS } from '../data/initialData';
 import { validarCPF } from '../utils/formatters';
 import { calcularRescisaoCompleta } from './calculosFeriasRescisao';
+import { processarFolhaEmpregado } from './calculosTrabalhistas';
+
+export interface ResultadoCompetenciaLote {
+  competencia: string;
+  status: 'PROCESSADA' | 'IGNORADA_FECHADA';
+  competenciaStatus: CompetenciaFolha;
+  folhas: FolhaEmpregado[];
+  mensagem: string;
+}
+
+export interface RespostaFolhaLote {
+  success: boolean;
+  totalCompetencias: number;
+  processadas: number;
+  ignoradasFechadas: number;
+  resultados: ResultadoCompetenciaLote[];
+}
 
 // URL base configurável via variável de ambiente VITE_API_URL (aceita apenas URLs HTTP/HTTPS válidas)
 const rawApiUrl = (
@@ -150,6 +167,47 @@ const CACHE_COMPETENCIAS_KEY = 'dp_facil_competencias_cache_v1';
 const CACHE_DELETED_COMPETENCIAS_KEY = 'dp_facil_competencias_deleted_v1';
 const CACHE_DOCUMENTOS_KEY = 'dp_facil_documentos_cache_v1';
 const CACHE_RESCISOES_KEY = 'dp_facil_rescisoes_cache_v1';
+const CACHE_FOLHAS_KEY = 'dp_facil_folhas_cache_v1';
+
+type FolhasCacheMap = Record<string, FolhaEmpregado[]>; // key: `${empresaId}_${competencia}`
+
+function getFolhasCacheMap(): FolhasCacheMap {
+  try {
+    if (typeof window === 'undefined') return {};
+    const raw = localStorage.getItem(CACHE_FOLHAS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {
+    // ignora
+  }
+  return {};
+}
+
+function setFolhasCacheMap(map: FolhasCacheMap) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CACHE_FOLHAS_KEY, JSON.stringify(map));
+    }
+  } catch {
+    // ignora
+  }
+}
+
+function saveFolhaCompetenciaLocal(empresaId: string, competencia: string, folhas: FolhaEmpregado[], compStatus?: CompetenciaFolha) {
+  const key = `${empresaId}_${competencia}`;
+  const map = getFolhasCacheMap();
+  map[key] = folhas;
+  setFolhasCacheMap(map);
+
+  if (compStatus) {
+    unmarkCompetenciaDeletedLocal(empresaId, competencia);
+    const comps = getCompetenciasCache();
+    const semDuplicada = comps.filter(c => !(c.empresaId === empresaId && c.competencia === competencia));
+    setCompetenciasCache([...semDuplicada, compStatus]);
+  }
+}
 
 function compKey(empresaId: string, competencia: string) {
   return `${empresaId}_${competencia}`;
@@ -955,25 +1013,49 @@ export const api = {
   async getFolha(empresaId: string, competencia: string): Promise<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }> {
     const compDecodificada = decodeURIComponent(competencia || '05/2026');
     const query = `empresaId=${encodeURIComponent(empresaId)}&competencia=${encodeURIComponent(compDecodificada)}`;
+    const cacheKey = `${empresaId}_${compDecodificada}`;
+    const folhasLocais = getFolhasCacheMap()[cacheKey];
+    const compCache = getCompetenciasCache().find(
+      c => c.empresaId === empresaId && c.competencia === compDecodificada
+    );
 
     try {
-      return await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
+      const res = await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
         `/api/folha?${query}`,
         undefined,
         'obter folha da competência'
       );
-    } catch (err: any) {
+      if (res.folhas && res.folhas.length > 0) {
+        saveFolhaCompetenciaLocal(empresaId, compDecodificada, res.folhas, res.competencia);
+        return res;
+      }
+      if (folhasLocais && folhasLocais.length > 0) {
+        return {
+          competencia: compCache || res.competencia,
+          folhas: folhasLocais,
+        };
+      }
+      return res;
+    } catch {
       try {
-        return await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
+        const res = await requestJson<{ competencia: CompetenciaFolha; folhas: FolhaEmpregado[] }>(
           `/api/folha/${encodeURIComponent(empresaId)}/${encodeURIComponent(compDecodificada)}`,
           undefined,
           'obter folha da competência'
         );
+        if (res.folhas && res.folhas.length > 0) {
+          saveFolhaCompetenciaLocal(empresaId, compDecodificada, res.folhas, res.competencia);
+          return res;
+        }
+        if (folhasLocais && folhasLocais.length > 0) {
+          return {
+            competencia: compCache || res.competencia,
+            folhas: folhasLocais,
+          };
+        }
+        return res;
       } catch (pathErr) {
         console.warn('[getFolha] Fallback seguro para folha inicial:', pathErr);
-        const compCache = getCompetenciasCache().find(
-          c => c.empresaId === empresaId && c.competencia === compDecodificada
-        );
         const ativosEmpresa = getEmpregadosCache().filter(
           e => e.empresaId === empresaId && e.status !== 'em_admissao' && e.status !== 'desligado'
         ).length;
@@ -984,67 +1066,330 @@ export const api = {
             competencia: compDecodificada,
             status: 'ABERTA',
             totalEmpregadosAtivos: ativosEmpresa,
-            totalCalculados: 0,
-            totalProventos: 0,
-            totalDescontos: 0,
-            totalLiquido: 0,
-            totalEncargosEmpresa: 0,
-            totalFGTS: 0,
+            totalCalculados: folhasLocais?.length || 0,
+            totalProventos: folhasLocais?.reduce((a, f) => a + f.totalProventos, 0) || 0,
+            totalDescontos: folhasLocais?.reduce((a, f) => a + f.totalDescontos, 0) || 0,
+            totalLiquido: folhasLocais?.reduce((a, f) => a + f.valorLiquido, 0) || 0,
+            totalEncargosEmpresa: folhasLocais?.reduce((a, f) => a + f.encargosEmpresa.totalEncargos, 0) || 0,
+            totalFGTS: folhasLocais?.reduce((a, f) => a + f.encargosEmpresa.fgtsDevido, 0) || 0,
             errosBloqueantes: [],
             alertasRevisao: [],
           },
-          folhas: [],
+          folhas: folhasLocais || [],
         };
       }
     }
   },
 
-  async calcularFolha(dados: { empresaId: string; competencia: string; empregadoId?: string; tipoFolha?: string }) {
-    return requestJson(
-      '/api/folha/calcular',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'calcular folha de pagamento'
-    );
+  async calcularFolha(dados: {
+    empresaId: string;
+    competencia: string;
+    empregadoId?: string;
+    tipoFolha?: string;
+    empresa?: Empresa;
+    empregados?: Empregado[];
+  }) {
+    const empresaAlvo =
+      dados.empresa || getEmpresasCache().find(e => e.id === dados.empresaId);
+    const empregadosEmpresa =
+      dados.empregados || getEmpregadosCache().filter(e => e.empresaId === dados.empresaId);
+
+    try {
+      const res: any = await requestJson(
+        '/api/folha/calcular',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...dados,
+            empresa: empresaAlvo,
+            empregados: empregadosEmpresa,
+          }),
+        },
+        'calcular folha de pagamento'
+      );
+      if (res?.calculadas && res?.competenciaStatus) {
+        saveFolhaCompetenciaLocal(dados.empresaId, dados.competencia, res.calculadas, res.competenciaStatus);
+      }
+      return res;
+    } catch (err: any) {
+      if (
+        empresaAlvo &&
+        (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500)
+      ) {
+        console.warn('[Departamento Fácil] Calculando folha em modo contingência local:', err.message);
+        const compExistente = getCompetenciasCache().find(
+          c => c.empresaId === dados.empresaId && c.competencia === dados.competencia
+        );
+        if (compExistente?.status === 'FECHADA') {
+          throw new Error('Esta competência está FECHADA. É obrigatório reabrir antes de recalcular.');
+        }
+
+        let emps = empregadosEmpresa.filter(
+          e => e.status !== 'em_admissao' && e.status !== 'desligado'
+        );
+        if (dados.empregadoId) {
+          emps = emps.filter(e => e.id === dados.empregadoId);
+        }
+
+        const calculadas = emps.map(emp =>
+          processarFolhaEmpregado(emp, empresaAlvo, dados.competencia, [], (dados.tipoFolha || 'MENSAL') as any)
+        );
+        const ativosCount = empregadosEmpresa.filter(
+          e => e.status !== 'em_admissao' && e.status !== 'desligado'
+        ).length;
+
+        const compStatus: CompetenciaFolha = {
+          id: compExistente?.id || `comp-${dados.empresaId}-${dados.competencia.replace(/\D/g, '')}`,
+          empresaId: dados.empresaId,
+          competencia: dados.competencia,
+          status: 'EM_CONFERENCIA',
+          tipoFolha: (compExistente?.tipoFolha || dados.tipoFolha || 'MENSAL') as any,
+          totalEmpregadosAtivos: ativosCount,
+          totalCalculados: calculadas.length,
+          totalProventos: Math.round(calculadas.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+          totalDescontos: Math.round(calculadas.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+          totalLiquido: Math.round(calculadas.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+          totalEncargosEmpresa: Math.round(calculadas.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+          totalFGTS: Math.round(calculadas.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+          errosBloqueantes: [],
+          alertasRevisao: [],
+        };
+
+        saveFolhaCompetenciaLocal(dados.empresaId, dados.competencia, calculadas, compStatus);
+        return { success: true, calculadas, competenciaStatus: compStatus };
+      }
+      throw err;
+    }
+  },
+
+  async calcularFolhaLote(dados: {
+    empresaId: string;
+    competencias: string[];
+    tipoFolha?: string;
+    empregadoId?: string;
+    empresa?: Empresa;
+    empregados?: Empregado[];
+  }): Promise<RespostaFolhaLote> {
+    const empresaAlvo =
+      dados.empresa || getEmpresasCache().find(e => e.id === dados.empresaId);
+    const empregadosEmpresa =
+      dados.empregados || getEmpregadosCache().filter(e => e.empresaId === dados.empresaId);
+
+    try {
+      const res = await requestJson<RespostaFolhaLote>(
+        '/api/folha/calcular-lote',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...dados,
+            empresa: empresaAlvo,
+            empregados: empregadosEmpresa,
+          }),
+        },
+        'calcular folha em lote'
+      );
+      if (Array.isArray(res?.resultados)) {
+        for (const item of res.resultados) {
+          if (item.status === 'PROCESSADA') {
+            saveFolhaCompetenciaLocal(
+              dados.empresaId,
+              item.competencia,
+              item.folhas,
+              item.competenciaStatus
+            );
+          }
+        }
+      }
+      return res;
+    } catch (err: any) {
+      if (
+        empresaAlvo &&
+        (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404 || err.status >= 500)
+      ) {
+        console.warn('[Departamento Fácil] Calculando folha em lote em modo contingência local:', err.message);
+        const competenciasUnicas = Array.from(
+          new Set(dados.competencias.map(c => c.trim()).filter(Boolean))
+        );
+        let emps = empregadosEmpresa.filter(
+          e => e.status !== 'em_admissao' && e.status !== 'desligado'
+        );
+        if (dados.empregadoId) {
+          emps = emps.filter(e => e.id === dados.empregadoId);
+        }
+        const ativosCount = empregadosEmpresa.filter(
+          e => e.status !== 'em_admissao' && e.status !== 'desligado'
+        ).length;
+
+        const resultados: ResultadoCompetenciaLote[] = [];
+        let processadas = 0;
+        let ignoradasFechadas = 0;
+
+        for (const compStr of competenciasUnicas) {
+          const compExistente = getCompetenciasCache().find(
+            c => c.empresaId === dados.empresaId && c.competencia === compStr
+          );
+          if (compExistente?.status === 'FECHADA') {
+            ignoradasFechadas++;
+            const folhasExist = getFolhasCacheMap()[`${dados.empresaId}_${compStr}`] || [];
+            resultados.push({
+              competencia: compStr,
+              status: 'IGNORADA_FECHADA',
+              competenciaStatus: compExistente,
+              folhas: folhasExist,
+              mensagem: 'Competência fechada (mantida sem alteração).',
+            });
+            continue;
+          }
+
+          const folhas = emps.map(emp =>
+            processarFolhaEmpregado(emp, empresaAlvo, compStr, [], (dados.tipoFolha || 'MENSAL') as any)
+          );
+          const compStatus: CompetenciaFolha = {
+            id: compExistente?.id || `comp-${dados.empresaId}-${compStr.replace(/\D/g, '')}`,
+            empresaId: dados.empresaId,
+            competencia: compStr,
+            status: 'EM_CONFERENCIA',
+            tipoFolha: (compExistente?.tipoFolha || dados.tipoFolha || 'MENSAL') as any,
+            totalEmpregadosAtivos: ativosCount,
+            totalCalculados: folhas.length,
+            totalProventos: Math.round(folhas.reduce((acc, f) => acc + f.totalProventos, 0) * 100) / 100,
+            totalDescontos: Math.round(folhas.reduce((acc, f) => acc + f.totalDescontos, 0) * 100) / 100,
+            totalLiquido: Math.round(folhas.reduce((acc, f) => acc + f.valorLiquido, 0) * 100) / 100,
+            totalEncargosEmpresa: Math.round(folhas.reduce((acc, f) => acc + f.encargosEmpresa.totalEncargos, 0) * 100) / 100,
+            totalFGTS: Math.round(folhas.reduce((acc, f) => acc + f.encargosEmpresa.fgtsDevido, 0) * 100) / 100,
+            errosBloqueantes: [],
+            alertasRevisao: [],
+          };
+
+          saveFolhaCompetenciaLocal(dados.empresaId, compStr, folhas, compStatus);
+          processadas++;
+          resultados.push({
+            competencia: compStr,
+            status: 'PROCESSADA',
+            competenciaStatus: compStatus,
+            folhas,
+            mensagem: `${folhas.length} colaborador(es) calculado(s).`,
+          });
+        }
+
+        return {
+          success: true,
+          totalCompetencias: competenciasUnicas.length,
+          processadas,
+          ignoradasFechadas,
+          resultados,
+        };
+      }
+      throw err;
+    }
   },
 
   async aprovarFecharCompetencia(dados: { empresaId: string; competencia: string; usuario?: string }) {
-    return requestJson(
-      '/api/folha/aprovar-fechar',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'fechar competência'
-    );
+    try {
+      const res: any = await requestJson(
+        '/api/folha/aprovar-fechar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'fechar competência'
+      );
+      if (res?.competencia) {
+        const comps = getCompetenciasCache().filter(
+          c => !(c.empresaId === dados.empresaId && c.competencia === dados.competencia)
+        );
+        setCompetenciasCache([...comps, res.competencia]);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const comps = getCompetenciasCache();
+        const comp = comps.find(c => c.empresaId === dados.empresaId && c.competencia === dados.competencia);
+        if (comp) {
+          comp.status = 'FECHADA';
+          comp.historicoFechamento = {
+            fechadoPor: dados.usuario || 'Operador DP',
+            dataFechamento: new Date().toISOString(),
+          };
+          setCompetenciasCache([...comps]);
+          return { success: true, competencia: comp };
+        }
+      }
+      throw err;
+    }
   },
 
   async reabrirCompetencia(dados: { empresaId: string; competencia: string; motivo: string; usuario?: string }) {
-    return requestJson(
-      '/api/folha/reabrir',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'reabrir competência'
-    );
+    try {
+      const res: any = await requestJson(
+        '/api/folha/reabrir',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'reabrir competência'
+      );
+      if (res?.competencia) {
+        const comps = getCompetenciasCache().filter(
+          c => !(c.empresaId === dados.empresaId && c.competencia === dados.competencia)
+        );
+        setCompetenciasCache([...comps, res.competencia]);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const comps = getCompetenciasCache();
+        const comp = comps.find(c => c.empresaId === dados.empresaId && c.competencia === dados.competencia);
+        if (comp) {
+          comp.status = 'EM_CONFERENCIA';
+          comp.historicoFechamento = {
+            ...(comp.historicoFechamento || {}),
+            reabertoPor: dados.usuario || 'Operador DP',
+            dataReabertura: new Date().toISOString(),
+            motivoReabertura: dados.motivo,
+          };
+          setCompetenciasCache([...comps]);
+          return { success: true, competencia: comp };
+        }
+      }
+      throw err;
+    }
   },
 
   async atualizarStatusCompetencia(dados: { empresaId: string; competencia: string; status: 'ABERTA' | 'EM_CONFERENCIA' | 'APROVADA' | 'FECHADA'; usuario?: string }) {
-    return requestJson(
-      '/api/folha/status',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      },
-      'atualizar status da competência'
-    );
+    try {
+      const res: any = await requestJson(
+        '/api/folha/status',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        },
+        'atualizar status da competência'
+      );
+      if (res?.competencia) {
+        const comps = getCompetenciasCache().filter(
+          c => !(c.empresaId === dados.empresaId && c.competencia === dados.competencia)
+        );
+        setCompetenciasCache([...comps, res.competencia]);
+      }
+      return res;
+    } catch (err: any) {
+      if (err.isNotFound || err.isHtmlResponse || err.isBackendUnavailable || err.status === 404) {
+        const comps = getCompetenciasCache();
+        const comp = comps.find(c => c.empresaId === dados.empresaId && c.competencia === dados.competencia);
+        if (comp) {
+          comp.status = dados.status;
+          setCompetenciasCache([...comps]);
+          return { success: true, competencia: comp };
+        }
+      }
+      throw err;
+    }
   },
 
   async getAuditoriaComparativa(empresaId: string, competencia: string) {
