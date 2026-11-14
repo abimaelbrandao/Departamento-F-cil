@@ -23,6 +23,8 @@ import {
 } from '../utils/pdfGenerator';
 import { PDFPreviewModal } from './PDFPreviewModal';
 import { formatarMoeda, formatarData, formatarValorDecimal, numeroParaExtenso } from '../utils/formatters';
+import { calcularINSSProgressivo, calcularIRRF } from '../services/calculosTrabalhistas';
+import { calcularRemuneracaoBaseComAdicionais } from '../services/calculosFeriasRescisao';
 
 interface Props {
   isOpen: boolean;
@@ -131,10 +133,10 @@ export const VacationDocumentsModal: React.FC<Props> = ({
   const [previewTitulo, setPreviewTitulo] = useState('');
   const [previewNomeArquivo, setPreviewNomeArquivo] = useState('');
 
-  // Salário contratual considerado no cálculo
-  const salarioContratual = empregado.salarioBase;
+  // Remuneração contratual considerada no cálculo (inclui periculosidade/insalubridade se cadastradas)
+  const salarioContratual = calcularRemuneracaoBaseComAdicionais(empregado);
 
-  // Cálculo matemático consistente
+  // Cálculo matemático consistente (Tabelas INSS & IRRF 2026 + Lei 15.270/2025)
   const calculoValores = useMemo(() => {
     const valorFerias = diasGozo === 30
       ? salarioContratual
@@ -149,43 +151,36 @@ export const VacationDocumentsModal: React.FC<Props> = ({
     const valor13 = adiantamento13 ? Math.round((salarioContratual * 0.5) * 100) / 100 : 0;
 
     const baseINSS = valorFerias + tercoFerias;
+    const ehEstagio = empregado.vinculo === 'ESTAGIO';
+    const ehAprendiz = empregado.vinculo === 'APRENDIZ';
+    const ehDiretor = empregado.vinculo === 'DIRETOR_ESTATUTARIO';
 
-    // INSS Tabela Progressiva 2026 oficial (dedução oficial de 24,33 na 2ª faixa)
-    let valorINSS = 0;
-    let aliquotaINSSStr = '9%';
-    if (baseINSS <= 1518.00) {
-      valorINSS = Math.round((baseINSS * 0.075) * 100) / 100;
-      aliquotaINSSStr = '7,5%';
-    } else if (baseINSS <= 2793.88) {
-      valorINSS = Math.round((baseINSS * 0.09 - 24.33) * 100) / 100;
-      aliquotaINSSStr = '9%';
-    } else if (baseINSS <= 4190.83) {
-      valorINSS = Math.round((baseINSS * 0.12 - 108.15) * 100) / 100;
-      aliquotaINSSStr = '12%';
-    } else if (baseINSS <= 8157.41) {
-      valorINSS = Math.round((baseINSS * 0.14 - 191.96) * 100) / 100;
-      aliquotaINSSStr = '14%';
-    } else {
-      valorINSS = 950.08;
-      aliquotaINSSStr = 'Teto';
-    }
+    const inssRes = !ehEstagio
+      ? calcularINSSProgressivo(baseINSS)
+      : { valorTotal: 0, aliquotaEfetiva: 0, passos: [], faixasCalculadas: [] };
+    const valorINSS = inssRes.valorTotal;
+    const aliquotaINSSStr = ehEstagio
+      ? 'Isento'
+      : baseINSS >= 8475.55
+      ? 'Teto'
+      : `${inssRes.aliquotaEfetiva.toFixed(2).replace('.', ',')}%`;
 
-    // IRRF
-    let valorIRRF = 0;
-    const baseIRRF = baseINSS - valorINSS;
-    if (baseIRRF > 2259.20) {
-      if (baseIRRF <= 2826.65) valorIRRF = Math.round(((baseIRRF * 0.075) - 169.44) * 100) / 100;
-      else if (baseIRRF <= 3751.05) valorIRRF = Math.round(((baseIRRF * 0.15) - 381.44) * 100) / 100;
-      else if (baseIRRF <= 4664.68) valorIRRF = Math.round(((baseIRRF * 0.225) - 662.77) * 100) / 100;
-      else valorIRRF = Math.round(((baseIRRF * 0.275) - 896.00) * 100) / 100;
-      valorIRRF = Math.max(0, valorIRRF);
-    }
+    const dependentesIRRF = (empregado.dependentes || []).filter(d => d.irrf).length;
+    const irrfRes = !ehEstagio
+      ? calcularIRRF(baseINSS, valorINSS, dependentesIRRF)
+      : { valorTotal: 0 };
+    const valorIRRF = irrfRes.valorTotal;
 
     const totalProventos = Math.round((valorFerias + tercoFerias + valorAbono + tercoAbono + valor13) * 100) / 100;
     const totalDescontos = Math.round((valorINSS + valorIRRF) * 100) / 100;
-    const liquido = Math.round((totalProventos - totalDescontos) * 100) / 100;
+    const liquido = Math.max(0, Math.round((totalProventos - totalDescontos) * 100) / 100);
 
-    const fgts = Math.round((baseINSS * 0.08) * 100) / 100;
+    const aliqFGTS = empregado.optanteFGTS === false || ehEstagio || ehDiretor
+      ? 0
+      : ehAprendiz
+      ? 0.02
+      : (empregado.aliquotaFGTS || 0.08);
+    const fgts = Math.round(((baseINSS + valor13) * aliqFGTS) * 100) / 100;
 
     return {
       valorFerias,
@@ -203,7 +198,7 @@ export const VacationDocumentsModal: React.FC<Props> = ({
       liquido,
       fgts,
     };
-  }, [salarioContratual, diasGozo, abonoPecuniario, adiantamento13]);
+  }, [salarioContratual, diasGozo, abonoPecuniario, adiantamento13, empregado]);
 
   if (!isOpen) return null;
 

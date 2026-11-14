@@ -3,7 +3,15 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { EMPRESAS_INICIAIS, EMPREGADOS_INICIAIS, RUBRICAS_SISTEMA, PERIODOS_FERIAS_INICIAIS, AGENDA_INICIAL, ESOCIAL_EVENTOS_INICIAIS } from '../data/initialData';
-import { processarFolhaEmpregado } from '../services/calculosTrabalhistas';
+import {
+  processarFolhaEmpregado,
+  calcularValorRubricaEvento,
+  SALARIO_MINIMO_NACIONAL,
+  TETO_INSS,
+  TETO_DESCONTO_INSS,
+  LIMITE_SALARIO_FAMILIA,
+  VALOR_COTA_SALARIO_FAMILIA,
+} from '../services/calculosTrabalhistas';
 import { calcularFeriasComApropriacao, calcularRescisaoCompleta } from '../services/calculosFeriasRescisao';
 import { Empresa, Empregado, Rubrica, FolhaEmpregado, CompetenciaFolha, LancamentoVariavel, PeriodoFerias, RescisaoSimulada, ContratoDocumento, Afastamento, ItemAgendaObrigacao, ESocialEvento, MovimentacaoMensalEmpresa } from '../types/dp';
 import { validarCNPJ, validarCPF } from '../utils/formatters';
@@ -318,22 +326,20 @@ function calcularValorLancamentoServidor(
   unidadeReferencia: string,
   valorInformado: number
 ): number {
-  if (valorInformado > 0) return Math.round(valorInformado * 100) / 100;
-  if (!emp) return Math.max(0, Math.round(referencia * 100) / 100);
-
-  const salario = emp.salarioBase || 0;
-  const divisor = emp.divisorHoras || 220;
-  const vh = salario / divisor;
-  const ref = referencia > 0 ? referencia : 1;
-
-  if (rubricaCodigo === '0101') return Math.round(vh * 1.5 * ref * 100) / 100;
-  if (rubricaCodigo === '0102') return Math.round(vh * 2.0 * ref * 100) / 100;
-  if (rubricaCodigo === '0103') return Math.round(vh * 0.2 * ref * 100) / 100;
-  if (rubricaCodigo === '0201') return Math.round((salario / 30) * ref * 100) / 100;
-  if (unidadeReferencia === 'PERCENTUAL') return Math.round(salario * (ref / 100) * 100) / 100;
-  if (unidadeReferencia === 'DIAS') return Math.round((salario / 30) * ref * 100) / 100;
-  if (unidadeReferencia === 'HORAS') return Math.round(vh * ref * 100) / 100;
-  return Math.round(ref * 100) / 100;
+  const unidadeNorm =
+    unidadeReferencia === 'HORAS' ||
+    unidadeReferencia === 'DIAS' ||
+    unidadeReferencia === 'PERCENTUAL' ||
+    unidadeReferencia === 'VALOR'
+      ? unidadeReferencia
+      : 'VALOR';
+  return calcularValorRubricaEvento({
+    rubricaCodigo,
+    referencia,
+    unidadeReferencia: unidadeNorm,
+    valorManual: valorInformado,
+    empregado: emp,
+  });
 }
 
 // Recalcula e sincroniza folha de pagamento e status da competência em memória/disco
@@ -2135,30 +2141,56 @@ app.use((req, res, next) => {
     res.json(evento);
   });
 
-  // Assistente de IA Especialista em DP e CLT Brasileira via Gemini SDK
+  // Assistente de IA Especialista em DP e CLT Brasileira via Gemini SDK + Base Determinística 2026
   app.post('/api/ai/consultar', async (req, res) => {
+    const pergunta = String(req.body?.pergunta || '');
+    const contexto = req.body?.contexto;
+    const baseRegras2026 = `Tabelas e Alíquotas Oficiais Vigentes 2026:
+- Salário Mínimo Nacional 2026: R$ ${SALARIO_MINIMO_NACIONAL.toFixed(2).replace('.', ',')}
+- INSS 2026 (Portaria MPS/MF nº 13/2026): até R$ 1.621,00 (7,5%) | R$ 1.621,01 a R$ 2.902,84 (9%, ded. R$ 24,32) | R$ 2.902,85 a R$ 4.354,27 (12%, ded. R$ 111,40) | R$ 4.354,28 a R$ ${TETO_INSS.toFixed(2).replace('.', ',')} (14%, ded. R$ 198,49). Teto de desconto: R$ ${TETO_DESCONTO_INSS.toFixed(2).replace('.', ',')}. Pró-labore: 11%.
+- IRRF 2026 (Lei nº 15.270/2025): Isento na tabela até R$ 2.428,80 | 7,5% (-182,16) até R$ 2.826,65 | 15% (-394,16) até R$ 3.751,05 | 22,5% (-675,49) até R$ 4.664,68 | 27,5% (-908,73) acima. Dependente: R$ 189,59. Desconto Simplificado Mensal: R$ 607,20. Redutor Lei 15.270/25: isenção total para rendimentos tributáveis brutos até R$ 5.000,00 e redução gradual até R$ 7.350,00 [978,62 - (0,133145 × R)].
+- Salário-Família 2026: R$ ${VALOR_COTA_SALARIO_FAMILIA.toFixed(2).replace('.', ',')} por dependente até R$ ${LIMITE_SALARIO_FAMILIA.toFixed(2).replace('.', ',')}.
+- Proventos CLT: HE Diurna +50% | HE Domingos/Feriados +100% | Adicional Noturno +20% + hora ficta (60/52,5 = 1,142857) | HE Noturna 1,80× com hora ficta | Periculosidade 30% s/ Salário Base | Insalubridade 10%/20%/40% s/ Salário Mínimo | Sobreaviso 33,33% (1/3) | Prontidão 66,67% (2/3) | Transferência Provisória 25% | Quebra de Caixa 10% | Intrajornada +50% (indenizatória) | DSR sobre HE/Noturno/Comissões.
+- Descontos & Benefícios: VT até 6% do salário base | PAT (VR/VA) até 20% do custo do benefício | Consignado até 35% da remuneração líquida | Pensão Alimentícia dedutível do IRRF | Faltas e DSR perdidos.
+- FGTS & Rescisão: FGTS 8% CLT (2% Jovem Aprendiz), Multa 40% (sem justa causa) / 20% (Acordo Art. 484-A), Aviso Prévio Lei 12.506 (30 + 3 dias/ano até 90 dias), Art. 479 (50% dos dias restantes na rescisão antecipada de experiência), Férias + 1/3 (33,33%) com redução por faltas do Art. 130 CLT e Abono isento de INSS/IRRF.`;
+
+    const gerarRespostaDeterministica = (q: string) => {
+      const ql = q.toLowerCase();
+      if (ql.includes('inss') || ql.includes('previd')) {
+        return `**Tabela Progressiva do INSS 2026 (Portaria MPS/MF nº 13/2026):**\n\n- **Até R$ 1.621,00:** 7,5% (parcela a deduzir R$ 0,00)\n- **R$ 1.621,01 a R$ 2.902,84:** 9,0% (dedução R$ 24,32)\n- **R$ 2.902,85 a R$ 4.354,27:** 12,0% (dedução R$ 111,40)\n- **R$ 4.354,28 a R$ 8.475,55:** 14,0% (dedução R$ 198,49)\n- **Teto de contribuição 2026:** **R$ 988,09** (sobre o teto de R$ 8.475,55). Pró-labore/Contribuinte Individual retém **11%** (teto R$ 932,31).\n- **Salário-Família 2026:** **R$ 67,54** por filho elegível para remuneração até **R$ 1.980,38**.`;
+      }
+      if (ql.includes('irrf') || ql.includes('imposto de renda') || ql.includes('5.000') || ql.includes('5000')) {
+        return `**Regras Oficiais do IRRF 2026 (Lei nº 15.270/2025):**\n\n- **Isenção Ampliada até R$ 5.000,00:** Rendimentos tributáveis brutos mensais até **R$ 5.000,00** recebem o redutor adicional (até R$ 312,89), zerando o IRRF.\n- **Faixa de Transição (R$ 5.000,01 a R$ 7.350,00):** Aplica-se o redutor gradual \`978,62 - (0,133145 × Rendimento Tributável)\`.\n- **Tabela Progressiva Base:** Até R$ 2.428,80 (Isento) | 7,5% (-182,16) | 15,0% (-394,16) | 22,5% (-675,49) | 27,5% (-908,73).\n- **Deduções:** Desconto Simplificado mensal de **R$ 607,20** ou Deduções Legais (INSS + **R$ 189,59** por dependente + Pensão Alimentícia Judicial), adotando automaticamente o menor imposto.`;
+      }
+      if (ql.includes('insalubr') || ql.includes('periculos')) {
+        return `**Adicionais de Risco e Insalubridade (CLT Art. 192 e 193):**\n\n- **Periculosidade:** **30%** fixos sobre o **Salário Base** (Art. 193 §1º CLT). Integra base de INSS, IRRF, FGTS, Férias, 13º e Horas Extras (Súmula 132 TST).\n- **Insalubridade:** Calculada sobre o **Salário Mínimo Nacional 2026 (R$ 1.621,00)** nos percentuais de **10%** (Grau Mínimo = R$ 162,10), **20%** (Grau Médio = R$ 324,20) ou **40%** (Grau Máximo = R$ 648,40).\n- *Nota:* Em regra não se acumulam; o empregado opta pelo adicional mais vantajoso (Art. 193 §2º CLT).`;
+      }
+      return `**Orientação Oficial do Especialista em DP (Vigência 2026):**\n\nSobre a consulta: *"${q}"*\n\n${baseRegras2026}`;
+    };
+
     try {
-      const { pergunta, contexto } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
         return res.json({
-          resposta: `**Orientação do Especialista em DP (Modo Determinístico):**\n\nPara a dúvida apresentada: "${pergunta}"\n\n- **Base Legal:** Consolidação das Leis do Trabalho (CLT), Emenda Constitucional 103/2019 e Lei 14.663/2023.\n- **Regra Prática:** No cálculo da folha, garanta que os lançamentos de horas extras e comissões componham as bases de INSS, FGTS e tenham reflexo direto no DSR (Lei 605/49).\n- **Conferência:** O desconto de vale-transporte é limitado a 6% do salário base ou custo do benefício (o que for menor). Para rescisão, o pagamento deve ocorrer estritamente em até 10 dias corridos do término contratual (Art. 477 § 6º).`,
+          resposta: gerarRespostaDeterministica(pergunta),
         });
       }
 
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Você é um Consultor Jurídico Trabalhista e Especialista Sênior em Departamento Pessoal no Brasil (CLT, eSocial, Previdência, FGTS Digital e Receita Federal).
+Use OBRIGATORIAMENTE os parâmetros oficiais vigentes de 2026 abaixo em todos os cálculos e respostas:
+${baseRegras2026}
+
 Contexto do sistema Departamento Fácil: ${JSON.stringify(contexto || {})}
 Pergunta do usuário: "${pergunta}"
 
 Forneça uma resposta clara, técnica, precisa e prática em Português do Brasil com:
-1. Resumo direto e conclusivo
-2. Fundamentação legal (artigos da CLT, Leis, Súmulas do TST ou Instruções Normativas)
-3. Regra de cálculo ou memória aritmética aplicável
-4. Cuidados para o fechamento da folha e envio ao eSocial.
-Mantenha a resposta concisa, profissional e didática.`;
+1. Resumo direto e conclusivo com as porcentagens exatas
+2. Fundamentação legal (artigos da CLT, Leis, Súmulas do TST ou Portarias)
+3. Regra de cálculo e incidências (INSS, IRRF, FGTS, DSR)
+4. Cuidados para o fechamento da folha e envio ao eSocial.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -2169,7 +2201,7 @@ Mantenha a resposta concisa, profissional e didática.`;
     } catch (err: any) {
       console.error('Erro ao consultar Gemini:', err);
       res.json({
-        resposta: 'O assistente de DP identificou a questão. Recomenda-se aplicar o cálculo determinístico conforme os parâmetros da CLT e verificar os comprovantes antes de fechar a competência.',
+        resposta: gerarRespostaDeterministica(pergunta),
       });
     }
   });

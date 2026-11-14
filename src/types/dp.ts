@@ -121,6 +121,10 @@ export interface Empregado {
   sindicatoLaboral?: string;
   pensaoAlimenticiaPercentualTRCT?: number;
   pensaoAlimenticiaPercentualFGTS?: number;
+  pensaoAlimenticiaPercentual?: number;
+  pensaoAlimenticiaValorFixo?: number;
+  adicionalPericulosidade?: boolean;
+  adicionalInsalubridade?: 'NENHUMA' | 'MINIMO_10' | 'MEDIO_20' | 'MAXIMO_40';
   categoriaTrabalhador?: string;
   cnpjTomadorObra?: string;
   observacoes?: string;
@@ -232,6 +236,11 @@ export interface Rubrica {
   incideIRRF: boolean;
   incideFGTS: boolean;
   incideDSR?: boolean;
+  dedutivelIRRF?: boolean;
+  percentualPadrao?: number;
+  basePercentual?: 'SALARIO_BASE' | 'SALARIO_MINIMO' | 'SALARIO_HORA' | 'SALARIO_DIA' | 'VALOR_BENEFICIO' | 'REMUNERACAO_LIQUIDA' | 'VALOR_FIXO';
+  formulaResumo?: string;
+  categoria?: 'PROVENTO_SALARIAL' | 'ADICIONAL' | 'BENEFICIO' | 'DESCONTO_LEGAL' | 'DESCONTO_BENEFICIO' | 'DESCONTO_JUDICIAL';
   baseCalculoLegal: string;
   vigenciaInicio: string;
   vigenciaFim?: string;
@@ -276,7 +285,7 @@ export interface FolhaEmpregado {
   cargo: string;
   departamento: string;
   competencia: string; // MM/YYYY
-  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | 'COMPLEMENTAR';
+  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | '13_INTEGRAL' | 'COMPLEMENTAR';
   salarioBase: number;
   itens: ItemCalculadoFolha[];
   totalProventos: number;

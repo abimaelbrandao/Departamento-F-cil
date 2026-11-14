@@ -1,36 +1,88 @@
-import { Empregado, RescisaoSimulada, MotivoRescisao, PeriodoFerias } from '../types/dp';
-import { calcularINSSProgressivo, calcularIRRF } from './calculosTrabalhistas';
+import { Empregado, RescisaoSimulada, MotivoRescisao } from '../types/dp';
+import {
+  SALARIO_MINIMO_NACIONAL,
+  TABELA_REDUCAO_FERIAS_FALTAS,
+  PERCENTUAIS_TRABALHISTAS,
+  calcularINSSProgressivo,
+  calcularIRRF,
+} from './calculosTrabalhistas';
 
 /**
- * Simula e calcula férias de acordo com as regras da CLT pós-reforma trabalhista
+ * Calcula a remuneração base mensal incorporando adicionais habituais cadastrados no empregado
+ * (Periculosidade 30% s/ Salário Base e Insalubridade 10%/20%/40% s/ Salário Mínimo Nacional)
+ */
+export function calcularRemuneracaoBaseComAdicionais(empregado: Empregado): number {
+  const salarioBase = Number(empregado.salarioBase || 0);
+  const ehDiretor = empregado.vinculo === 'DIRETOR_ESTATUTARIO';
+  const ehEstagio = empregado.vinculo === 'ESTAGIO';
+  if (ehDiretor || ehEstagio) return salarioBase;
+
+  const peric = empregado.adicionalPericulosidade
+    ? Math.round(salarioBase * (PERCENTUAIS_TRABALHISTAS.periculosidade / 100) * 100) / 100
+    : 0;
+
+  let insalub = 0;
+  if (empregado.adicionalInsalubridade === 'MINIMO_10') {
+    insalub = Math.round(SALARIO_MINIMO_NACIONAL * 0.10 * 100) / 100;
+  } else if (empregado.adicionalInsalubridade === 'MEDIO_20') {
+    insalub = Math.round(SALARIO_MINIMO_NACIONAL * 0.20 * 100) / 100;
+  } else if (empregado.adicionalInsalubridade === 'MAXIMO_40') {
+    insalub = Math.round(SALARIO_MINIMO_NACIONAL * 0.40 * 100) / 100;
+  }
+
+  return Math.round((salarioBase + peric + insalub) * 100) / 100;
+}
+
+/**
+ * Tabela oficial de redução do direito a férias por faltas injustificadas (Art. 130 da CLT)
+ */
+export function diasFeriasPorFaltasCLT(faltasInjustificadas: number): number {
+  const faltas = Math.max(0, Math.floor(Number(faltasInjustificadas) || 0));
+  const faixa = TABELA_REDUCAO_FERIAS_FALTAS.find(
+    f => faltas >= f.faltasMin && faltas <= f.faltasMax
+  );
+  return faixa ? faixa.diasDireito : 0;
+}
+
+/**
+ * Simula e calcula férias de acordo com as regras da CLT pós-reforma trabalhista e tabelas 2026
  */
 export function calcularFeriasComApropriacao(
   empregado: Empregado,
   dataInicio: string,
   diasGozo: number,
-  abonoPecuniario: boolean = false, // Venda de 10 dias
-  adiantamento13: boolean = false
+  abonoPecuniario: boolean = false, // Venda de 10 dias (Art. 143 CLT - máx 1/3)
+  adiantamento13: boolean = false,
+  faltasNoPeriodoAquisitivo: number = 0
 ) {
-  const salarioBase = empregado.salarioBase;
+  const salarioBase = calcularRemuneracaoBaseComAdicionais(empregado);
   const salarioDia = salarioBase / 30;
+  const ehEstagio = empregado.vinculo === 'ESTAGIO';
+  const ehAprendiz = empregado.vinculo === 'APRENDIZ';
+  const diasDireitoCLT = diasFeriasPorFaltasCLT(faltasNoPeriodoAquisitivo);
 
   // Dias de gozo e abono
-  const diasAbono = abonoPecuniario ? 10 : 0;
-  const diasEfetivosGozo = abonoPecuniario ? Math.min(diasGozo, 20) : diasGozo;
+  const diasSolicitadosLimitados = Math.min(Math.max(0, diasGozo), diasDireitoCLT || 30);
+  const diasAbono = abonoPecuniario ? Math.max(0, Math.min(10, Math.floor(diasDireitoCLT / 3))) : 0;
+  const diasEfetivosGozo = abonoPecuniario
+    ? Math.min(diasSolicitadosLimitados, Math.max(0, (diasDireitoCLT || 30) - diasAbono))
+    : diasSolicitadosLimitados;
 
   // 1. Remuneração dos dias de férias
-  const valorFeriasGozo = Math.round((salarioDia * diasEfetivosGozo) * 100) / 100;
+  const valorFeriasGozo = diasEfetivosGozo === 30
+    ? Math.round(salarioBase * 100) / 100
+    : Math.round((salarioDia * diasEfetivosGozo) * 100) / 100;
   const tercoConstitucionalGozo = Math.round((valorFeriasGozo / 3) * 100) / 100;
 
-  // 2. Abono pecuniário (se solicitado)
+  // 2. Abono pecuniário (se solicitado — isento de INSS, IRRF e FGTS)
   let valorAbono = 0;
   let tercoAbono = 0;
-  if (abonoPecuniario) {
+  if (abonoPecuniario && diasAbono > 0) {
     valorAbono = Math.round((salarioDia * diasAbono) * 100) / 100;
     tercoAbono = Math.round((valorAbono / 3) * 100) / 100;
   }
 
-  // 3. Adiantamento da 1ª parcela do 13º (opcional)
+  // 3. Adiantamento da 1ª parcela do 13º (opcional — 50%, sem desconto INSS/IRRF)
   let valorAdiantamento13 = 0;
   if (adiantamento13) {
     valorAdiantamento13 = Math.round((salarioBase * 0.50) * 100) / 100;
@@ -38,27 +90,46 @@ export function calcularFeriasComApropriacao(
 
   // Base tributável para INSS e IRRF das férias:
   // O Abono Pecuniário e seu 1/3 são ISENTOS de INSS e IRRF (Súmula 125 STJ / Parecer PGFN)
-  const baseTributavelFerias = valorFeriasGozo + tercoConstitucionalGozo;
+  const baseTributavelFerias = Math.round((valorFeriasGozo + tercoConstitucionalGozo) * 100) / 100;
 
-  // Cálculo do INSS s/ Férias
-  const inssCalculado = calcularINSSProgressivo(baseTributavelFerias);
+  // Cálculo do INSS s/ Férias (Tabela Progressiva 2026)
+  const inssCalculado = !ehEstagio
+    ? calcularINSSProgressivo(baseTributavelFerias)
+    : { valorTotal: 0, aliquotaEfetiva: 0, passos: [], faixasCalculadas: [] };
   const valorINSSFerias = inssCalculado.valorTotal;
 
-  // Cálculo do IRRF s/ Férias (Férias têm tributação exclusiva na fonte, separada do salário mensal)
+  // Cálculo do IRRF s/ Férias (Tributação exclusiva na fonte 2026 + Lei 15.270/2025)
   const dependentesIRRF = (empregado.dependentes || []).filter(d => d.irrf).length;
-  const irrfCalculado = calcularIRRF(baseTributavelFerias, valorINSSFerias, dependentesIRRF);
+  const irrfCalculado = !ehEstagio
+    ? calcularIRRF(baseTributavelFerias, valorINSSFerias, dependentesIRRF)
+    : {
+        valorTotal: 0,
+        baseCalculo: 0,
+        aliquotaAplicada: 0,
+        deducaoAplicada: 0,
+        redutorLei15270: 0,
+        metodoUtilizado: 'DEDUCOES_LEGAIS' as const,
+        passos: [],
+      };
   const valorIRRFFerias = irrfCalculado.valorTotal;
 
+  // FGTS s/ férias gozadas + 1/3 (8% CLT, 2% Aprendiz, 0% Estágio/Diretor)
+  const aliqFGTS = empregado.optanteFGTS === false || ehEstagio || empregado.vinculo === 'DIRETOR_ESTATUTARIO'
+    ? 0
+    : ehAprendiz
+    ? 0.02
+    : (empregado.aliquotaFGTS || 0.08);
+  const valorFGTSFerias = Math.round(((baseTributavelFerias + valorAdiantamento13) * aliqFGTS) * 100) / 100;
+
   // Total Bruto e Líquido
-  const totalBruto = valorFeriasGozo + tercoConstitucionalGozo + valorAbono + tercoAbono + valorAdiantamento13;
-  const totalDescontos = valorINSSFerias + valorIRRFFerias;
-  const valorLiquido = Math.round((totalBruto - totalDescontos) * 100) / 100;
+  const totalBruto = Math.round((valorFeriasGozo + tercoConstitucionalGozo + valorAbono + tercoAbono + valorAdiantamento13) * 100) / 100;
+  const totalDescontos = Math.round((valorINSSFerias + valorIRRFFerias) * 100) / 100;
+  const valorLiquido = Math.max(0, Math.round((totalBruto - totalDescontos) * 100) / 100);
 
   // Apropriação bi-mensal caso o período atravesse dois meses
-  // Exemplo: Início em 20/05/2026 com 30 dias (vai até 18/06/2026)
   const dInicio = new Date(dataInicio + 'T00:00:00');
   const dFim = new Date(dInicio);
-  dFim.setDate(dFim.getDate() + diasEfetivosGozo - 1);
+  dFim.setDate(dFim.getDate() + Math.max(1, diasEfetivosGozo) - 1);
 
   const mesInicio = dInicio.getMonth();
   const mesFim = dFim.getMonth();
@@ -72,20 +143,21 @@ export function calcularFeriasComApropriacao(
   let diasMes2 = 0;
 
   if (mesInicio !== mesFim || anoInicio !== anoFim) {
-    // Calcula quantos dias ficaram no primeiro mês
     const ultimoDiaMes1 = new Date(anoInicio, mesInicio + 1, 0).getDate();
     diasMes1 = ultimoDiaMes1 - dInicio.getDate() + 1;
-    diasMes2 = diasEfetivosGozo - diasMes1;
+    diasMes2 = Math.max(0, diasEfetivosGozo - diasMes1);
   }
 
-  const valorProporcionalMes1 = Math.round(((valorFeriasGozo + tercoConstitucionalGozo) * (diasMes1 / diasEfetivosGozo)) * 100) / 100;
-  const valorProporcionalMes2 = Math.round(((valorFeriasGozo + tercoConstitucionalGozo) - valorProporcionalMes1) * 100) / 100;
+  const divisorDias = Math.max(1, diasEfetivosGozo);
+  const valorProporcionalMes1 = Math.round((baseTributavelFerias * (diasMes1 / divisorDias)) * 100) / 100;
+  const valorProporcionalMes2 = Math.round((baseTributavelFerias - valorProporcionalMes1) * 100) / 100;
 
   // Data limite para pagamento (Art. 145 CLT: até 2 dias antes do início do gozo)
   const dataLimitePagamento = new Date(dInicio);
   dataLimitePagamento.setDate(dataLimitePagamento.getDate() - 2);
 
   return {
+    diasDireitoCLT,
     diasGozo: diasEfetivosGozo,
     diasAbono,
     valorFeriasGozo,
@@ -98,6 +170,7 @@ export function calcularFeriasComApropriacao(
     inssCalculado,
     valorIRRFFerias,
     irrfCalculado,
+    valorFGTSFerias,
     totalBruto,
     totalDescontos,
     valorLiquido,
@@ -150,7 +223,7 @@ export function obterDescricaoCausaAfastamento(motivo: MotivoRescisao): string {
     case 'TERMINO_CONTRATO_EXPERIENCIA':
       return 'Término de contrato de trabalho por prazo determinado';
     case 'RESCISAO_ANTECIPADA_EXPERIENCIA':
-      return 'Rescisão antecipada do contrato de experiência';
+      return 'Rescisão antecipada do contrato de experiência (Art. 479 CLT)';
     default:
       return 'Despedida sem justa causa, pelo empregador';
   }
@@ -164,8 +237,11 @@ export function calcularRescisaoCompleta(
   saldoFGTSAtualComprovado: number = 0,
   adiantamentoJaPagoNaCompetencia: number = 0
 ): RescisaoSimulada {
-  const salarioBase = Number(empregado.salarioBase || 0);
+  const salarioBase = calcularRemuneracaoBaseComAdicionais(empregado);
   const salarioDia = salarioBase / 30;
+  const ehEstagio = empregado.vinculo === 'ESTAGIO';
+  const ehAprendiz = empregado.vinculo === 'APRENDIZ';
+  const ehDiretor = empregado.vinculo === 'DIRETOR_ESTATUTARIO';
 
   const dataAdmBase = empregado.dataAdmissao || empregado.dataPrevisaoInicio || dataDesligamento;
   const dAdmissao = new Date(dataAdmBase + 'T00:00:00');
@@ -179,9 +255,7 @@ export function calcularRescisaoCompleta(
   }
   anosCompletos = Math.max(0, anosCompletos);
 
-  // 1. Aviso Prévio Proporcional (Lei nº 12.506/2011)
-  // Se indenizado: 30 + 3 por ano completo até 90 dias
-  // Se trabalhado com mais de 1 ano completo: os 30 dias são trabalhados e os (anos * 3) dias excedentes são indenizados no TRCT (rubrica 69)
+  // 1. Aviso Prévio Proporcional (Lei nº 12.506/2011) ou Indenização Art. 479 CLT
   let diasAvisoTotal = 30;
   if (motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' || motivo === 'RESCISAO_INDIRETA' || motivo === 'ACORDO_CONSENSUAL_484A') {
     diasAvisoTotal = Math.min(90, 30 + (anosCompletos * 3));
@@ -189,10 +263,30 @@ export function calcularRescisaoCompleta(
 
   let diasAvisoIndenizado = 0;
   let valorAvisoPrevio = 0;
+  let avisoPrevioDescontado = 0;
 
-  if (tipoAviso === 'INDENIZADO') {
+  if (motivo === 'RESCISAO_ANTECIPADA_EXPERIENCIA') {
+    // Art. 479 CLT: indenização de 50% dos dias faltantes para o término previsto da experiência
+    const dataFimPrevistaStr = empregado.dataFimExperiencia2 || empregado.dataFimExperiencia1;
+    let dFimExp = dataFimPrevistaStr ? new Date(dataFimPrevistaStr + 'T00:00:00') : new Date(dAdmissao);
+    if (!dataFimPrevistaStr) {
+      dFimExp.setDate(dFimExp.getDate() + 89);
+    }
+    const diffDiasRestantes = Math.max(
+      0,
+      Math.round((dFimExp.getTime() - dDesligamento.getTime()) / (1000 * 60 * 60 * 24))
+    );
+    diasAvisoIndenizado = Math.ceil(diffDiasRestantes * 0.5);
+    valorAvisoPrevio = Math.round((salarioDia * (diffDiasRestantes * 0.5)) * 100) / 100;
+  } else if (motivo === 'PEDIDO_DEMISSAO_EMPREGADO') {
+    if (tipoAviso === 'INDENIZADO') {
+      // Art. 487 § 2º CLT: desconto limitado a 30 dias quando empregado não cumpre e empresa não dispensa
+      avisoPrevioDescontado = Math.round(salarioBase * 100) / 100;
+    }
+  } else if (tipoAviso === 'INDENIZADO') {
     diasAvisoIndenizado = diasAvisoTotal;
     if (motivo === 'ACORDO_CONSENSUAL_484A') {
+      // Art. 484-A CLT: 50% do aviso prévio indenizado
       valorAvisoPrevio = Math.round(((salarioDia * diasAvisoTotal) / 2) * 100) / 100;
     } else if (motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' || motivo === 'RESCISAO_INDIRETA') {
       valorAvisoPrevio = Math.round((salarioDia * diasAvisoTotal) * 100) / 100;
@@ -202,10 +296,12 @@ export function calcularRescisaoCompleta(
     diasAvisoIndenizado = Math.max(0, anosCompletos * 3);
     if (diasAvisoIndenizado > 0 && (motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' || motivo === 'RESCISAO_INDIRETA')) {
       valorAvisoPrevio = Math.round((salarioDia * diasAvisoIndenizado) * 100) / 100;
+    } else if (diasAvisoIndenizado > 0 && motivo === 'ACORDO_CONSENSUAL_484A') {
+      valorAvisoPrevio = Math.round(((salarioDia * diasAvisoIndenizado) / 2) * 100) / 100;
     }
   }
 
-  // Data do Aviso Prévio (30 dias antes do afastamento se trabalhado, ou no próprio desligamento se indenizado)
+  // Data do Aviso Prévio
   let dataAviso = '';
   if (tipoAviso === 'TRABALHADO') {
     const dAviso = new Date(dDesligamento);
@@ -224,12 +320,22 @@ export function calcularRescisaoCompleta(
   let avos13 = 0;
   const anoDesligamento = dDesligamento.getFullYear();
   const mesInicio13 = (dAdmissao.getFullYear() === anoDesligamento) ? dAdmissao.getMonth() : 0;
-  const mesFim13 = dDesligamento.getMonth(); // 0-indexed
+  const mesFim13 = dDesligamento.getMonth();
 
-  // Meses completos anteriores no ano
   avos13 = Math.max(0, mesFim13 - mesInicio13);
-  if (diaDoMesDesligamento >= 15) {
-    avos13 += 1;
+  if (dAdmissao.getFullYear() === anoDesligamento && dAdmissao.getMonth() === mesFim13) {
+    // Admitido e demitido no mesmo mês: verifica dias trabalhados
+    const diasTrabMesmoMes = dDesligamento.getDate() - dAdmissao.getDate() + 1;
+    avos13 = diasTrabMesmoMes >= 15 ? 1 : 0;
+  } else {
+    if (dAdmissao.getFullYear() === anoDesligamento) {
+      const ultimoDiaMesAdm = new Date(anoDesligamento, dAdmissao.getMonth() + 1, 0).getDate();
+      const diasTrabMesAdm = ultimoDiaMesAdm - dAdmissao.getDate() + 1;
+      if (diasTrabMesAdm < 15) avos13 = Math.max(0, avos13 - 1);
+    }
+    if (diaDoMesDesligamento >= 15) {
+      avos13 += 1;
+    }
   }
   avos13 = Math.min(12, Math.max(0, avos13));
 
@@ -239,24 +345,31 @@ export function calcularRescisaoCompleta(
   if (motivo !== 'COM_JUSTA_CAUSA_EMPREGADOR') {
     decimoTerceiroProporcional = Math.round(((salarioBase / 12) * avos13) * 100) / 100;
 
-    // Reflexo do aviso indenizado na projeção do 13º salário (se aviso indenizado >= 15 dias)
-    if (tipoAviso === 'INDENIZADO' && diasAvisoIndenizado >= 15) {
-      const avosProjecaoAviso = Math.floor(diasAvisoIndenizado / 30);
-      decimoTerceiroIndenizado = Math.round(((salarioBase / 12) * Math.max(1, avosProjecaoAviso)) * 100) / 100;
+    // Reflexo do aviso prévio indenizado na projeção do 13º (CLT Art. 487 §1º)
+    if (
+      tipoAviso === 'INDENIZADO' &&
+      (motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' || motivo === 'RESCISAO_INDIRETA' || motivo === 'ACORDO_CONSENSUAL_484A') &&
+      diasAvisoIndenizado >= 15
+    ) {
+      const avosProjecaoAviso = Math.max(1, Math.floor(diasAvisoIndenizado / 30));
+      decimoTerceiroIndenizado = Math.round(((salarioBase / 12) * avosProjecaoAviso) * 100) / 100;
     }
   }
 
-  // 4. Férias Proporcionais + 1/3 (meses no período aquisitivo corrente)
-  // Período aquisitivo conta a partir do aniversário da data de admissão
+  // 4. Férias Proporcionais + 1/3 Constitucional (33,33%)
   let ultimoAniversarioAdmissao = new Date(anoDesligamento, dAdmissao.getMonth(), dAdmissao.getDate());
   if (ultimoAniversarioAdmissao > dDesligamento) {
     ultimoAniversarioAdmissao = new Date(anoDesligamento - 1, dAdmissao.getMonth(), dAdmissao.getDate());
   }
 
-  // Meses decorridos desde o último aniversário de admissão
   let avosFerias = (dDesligamento.getFullYear() - ultimoAniversarioAdmissao.getFullYear()) * 12 + (dDesligamento.getMonth() - ultimoAniversarioAdmissao.getMonth());
-  if (dDesligamento.getDate() < ultimoAniversarioAdmissao.getDate() && (dDesligamento.getDate() - ultimoAniversarioAdmissao.getDate() + 30) < 15) {
-    avosFerias--;
+  if (dDesligamento.getDate() < ultimoAniversarioAdmissao.getDate()) {
+    const diasFrac = dDesligamento.getDate() - ultimoAniversarioAdmissao.getDate() + 30;
+    if (diasFrac >= 15) avosFerias = Math.max(0, avosFerias); // já conta o avo parcial
+    else avosFerias = Math.max(0, avosFerias - 1);
+  } else {
+    const diasFrac = dDesligamento.getDate() - ultimoAniversarioAdmissao.getDate() + 1;
+    if (diasFrac >= 15 && avosFerias < 12) avosFerias += 1;
   }
   avosFerias = Math.min(12, Math.max(0, avosFerias));
 
@@ -273,31 +386,50 @@ export function calcularRescisaoCompleta(
     feriasProporcionaisComTerco = Math.round((feriasProporcionaisBase + tercoFeriasConstitucional) * 100) / 100;
   }
 
-  // 5. Dedução Previdenciária do Saldo de Salário e 13º
-  let inssSaldoSalario = Math.round(calcularINSSProgressivo(valorSaldoSalario).valorTotal * 100) / 100;
-  let inss13 = Math.round(calcularINSSProgressivo(decimoTerceiroProporcional).valorTotal * 100) / 100;
+  // 5. Dedução Previdenciária (INSS 2026) e IRRF 2026 (Lei 15.270/2025)
+  const dependentesIRRF = (empregado.dependentes || []).filter(d => d.irrf).length;
+  const inssSaldoSalario = !ehEstagio ? calcularINSSProgressivo(valorSaldoSalario).valorTotal : 0;
+  const base13Tributavel = Math.round((decimoTerceiroProporcional + decimoTerceiroIndenizado) * 100) / 100;
+  const inss13 = !ehEstagio ? calcularINSSProgressivo(base13Tributavel).valorTotal : 0;
 
-  // Ajuste de truncamento de centavos conforme sistema emissor de referência (4,46 e 100,53)
-  if (empregado.matricula === '00042' || empregado.id === 'emp-edenir' || (salarioBase === 1787.30 && valorSaldoSalario === 59.58)) {
-    inssSaldoSalario = 4.46;
-    inss13 = 100.53;
-  }
+  // Férias indenizadas (+1/3) e Aviso Prévio indenizado são ISENTOS de IRRF (Súmula 386 STJ / Art. 6º V Lei 7.713)
+  const irrfRescisao = !ehEstagio ? calcularIRRF(valorSaldoSalario, inssSaldoSalario, dependentesIRRF).valorTotal : 0;
+  const irrfDecimoTerceiro = !ehEstagio ? calcularIRRF(base13Tributavel, inss13, dependentesIRRF).valorTotal : 0;
 
-  // 6. Multa Rescisória do FGTS (40% para dispensa sem justa causa, 20% para acordo consensual)
+  // Pensão alimentícia em TRCT se configurada no cadastro do colaborador
+  const percPensaoTRCT = Number(empregado.pensaoAlimenticiaPercentualTRCT || empregado.pensaoAlimenticiaPercentual || 0);
+  const pensaoAlimenticia = percPensaoTRCT > 0
+    ? Math.round(Math.max(0, (valorSaldoSalario + decimoTerceiroProporcional - inssSaldoSalario - inss13)) * (percPensaoTRCT / 100) * 100) / 100
+    : 0;
+
+  // 6. Multa Rescisória do FGTS (40% sem justa causa / indireta / antecipada empregador; 20% acordo 484-A)
   let percentualMultaFGTS = 0;
-  if (motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' || motivo === 'RESCISAO_INDIRETA') {
+  if (
+    motivo === 'SEM_JUSTA_CAUSA_EMPREGADOR' ||
+    motivo === 'RESCISAO_INDIRETA' ||
+    motivo === 'RESCISAO_ANTECIPADA_EXPERIENCIA'
+  ) {
     percentualMultaFGTS = 0.40;
   } else if (motivo === 'ACORDO_CONSENSUAL_484A') {
     percentualMultaFGTS = 0.20;
   }
 
-  // Estimativa de saldo FGTS se não comprovado integralmente
-  const mesesTrabalhadosTotal = Math.max(1, (anosCompletos * 12) + (dDesligamento.getMonth() + 1));
-  const saldoFGTSEstimado = Math.round((empregado.salarioBase * 0.08 * mesesTrabalhadosTotal) * 100) / 100;
-  const saldoBaseParaMulta = saldoFGTSAtualComprovado > 0 ? saldoFGTSAtualComprovado : saldoFGTSEstimado;
-  const multaFGTS = Math.round((saldoBaseParaMulta * percentualMultaFGTS) * 100) / 100;
+  const aliqFGTSMensal = empregado.optanteFGTS === false || ehEstagio || ehDiretor
+    ? 0
+    : ehAprendiz
+    ? 0.02
+    : (empregado.aliquotaFGTS || 0.08);
 
-  // 7. Demonstrativo do FGTS por competência (conferência de depósitos)
+  const mesesTrabalhadosTotal = Math.max(
+    1,
+    ((dDesligamento.getFullYear() - dAdmissao.getFullYear()) * 12) +
+    (dDesligamento.getMonth() - dAdmissao.getMonth()) + 1
+  );
+  const saldoFGTSEstimado = Math.round((salarioBase * aliqFGTSMensal * mesesTrabalhadosTotal) * 100) / 100;
+  const saldoBaseParaMulta = saldoFGTSAtualComprovado > 0 ? saldoFGTSAtualComprovado : saldoFGTSEstimado;
+  const multaFGTS = aliqFGTSMensal > 0 ? Math.round((saldoBaseParaMulta * percentualMultaFGTS) * 100) / 100 : 0;
+
+  // 7. Demonstrativo do FGTS por competência
   const demonstrativoFGTSCompetencias = [];
   let totalDepositado = 0;
   let totalDevido = 0;
@@ -306,7 +438,7 @@ export function calcularRescisaoCompleta(
     const dComp = new Date(dDesligamento);
     dComp.setMonth(dComp.getMonth() - i);
     const compNome = `${String(dComp.getMonth() + 1).padStart(2, '0')}/${dComp.getFullYear()}`;
-    const valorMesDevido = Math.round((salarioBase * 0.08) * 100) / 100;
+    const valorMesDevido = Math.round((salarioBase * aliqFGTSMensal) * 100) / 100;
     const depositado = i > 1;
     totalDevido += valorMesDevido;
     if (depositado) totalDepositado += valorMesDevido;
@@ -318,7 +450,7 @@ export function calcularRescisaoCompleta(
     });
   }
 
-  // 8. Totais e Dedução de Adiantamento sem duplicidade
+  // 8. Totais e Deduções
   const totalBruto = Math.round((
     valorSaldoSalario +
     valorAvisoPrevio +
@@ -330,8 +462,12 @@ export function calcularRescisaoCompleta(
 
   const totalDescontos = Math.round((
     inssSaldoSalario +
+    irrfRescisao +
     inss13 +
-    adiantamentoJaPagoNaCompetencia
+    irrfDecimoTerceiro +
+    adiantamentoJaPagoNaCompetencia +
+    avisoPrevioDescontado +
+    pensaoAlimenticia
   ) * 100) / 100;
 
   const liquidoRescisao = Math.max(0, Math.round((totalBruto - totalDescontos) * 100) / 100);
@@ -372,13 +508,13 @@ export function calcularRescisaoCompleta(
     saldoFGTSParaMulta: saldoBaseParaMulta,
     descontos: {
       inssSaldoSalario,
-      irrfRescisao: 0,
+      irrfRescisao,
       adiantamentoJaPago: adiantamentoJaPagoNaCompetencia,
       outrosDescontos: inss13,
       inssDecimoTerceiro: inss13,
-      irrfDecimoTerceiro: 0,
-      avisoPrevioDescontado: 0,
-      pensaoAlimenticia: 0,
+      irrfDecimoTerceiro,
+      avisoPrevioDescontado,
+      pensaoAlimenticia,
     },
     totalBruto,
     totalDescontos,

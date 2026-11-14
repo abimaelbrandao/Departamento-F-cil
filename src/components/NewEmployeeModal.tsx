@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { X, UserPlus, CheckCircle2, FileText, UserCheck } from 'lucide-react';
 import { gerarContratoTrabalhoPDF, gerarDocumentosAdmissaoConjuntoPDF } from '../utils/pdfGenerator';
 import { validarCPF } from '../utils/formatters';
+import { LIMITE_SALARIO_FAMILIA } from '../services/calculosTrabalhistas';
 
 interface Props {
   isOpen: boolean;
@@ -145,7 +146,7 @@ export const NewEmployeeModal: React.FC<Props> = ({
             dataNascimento: '2022-01-01',
             cpf: cpfDependente || '000.0000.000-00',
             irrf: true,
-            salarioFamilia: Number(salarioBase) <= 1819.26,
+            salarioFamilia: Number(salarioBase) <= LIMITE_SALARIO_FAMILIA,
           }
         ] : [],
         beneficios: [

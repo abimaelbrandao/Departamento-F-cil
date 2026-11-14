@@ -4,6 +4,11 @@ import { RUBRICAS_SISTEMA } from '../data/initialData';
 import { api } from '../services/api';
 import { formatarMoeda } from '../utils/formatters';
 import {
+  calcularValorRubricaEvento,
+  VALOR_COTA_SALARIO_FAMILIA,
+  SALARIO_MINIMO_NACIONAL,
+} from '../services/calculosTrabalhistas';
+import {
   X,
   CheckCircle2,
   AlertCircle,
@@ -39,9 +44,36 @@ function parseNumeroDecimal(raw: string | number): number {
 }
 
 function unidadePadraoPorRubrica(codigo: string): 'HORAS' | 'DIAS' | 'PERCENTUAL' | 'VALOR' {
-  if (codigo === '0101' || codigo === '0102' || codigo === '0103') return 'HORAS';
-  if (codigo === '0201' || codigo === '0202') return 'DIAS';
+  if (['0101', '0102', '0103', '0110', '0111', '0114', '0115', '0203'].includes(codigo)) return 'HORAS';
+  if (['0119', '0201', '0202'].includes(codigo)) return 'DIAS';
+  if (['0020', '0106', '0107', '0108', '0109', '0112', '0113', '0204', '0301'].includes(codigo)) return 'PERCENTUAL';
   return 'VALOR';
+}
+
+function referenciaPadraoPorRubrica(codigo: string): string {
+  const mapa: Record<string, string> = {
+    '0020': '40',
+    '0106': '30',
+    '0107': '10',
+    '0108': '20',
+    '0109': '40',
+    '0112': '25',
+    '0113': '10',
+    '0204': '40',
+    '0301': '6',
+    '0101': '10',
+    '0102': '8',
+    '0103': '20',
+    '0114': '6',
+    '0110': '12',
+    '0111': '6',
+    '0115': '4',
+    '0203': '2',
+    '0119': '15',
+    '0201': '1',
+    '0202': '1',
+  };
+  return mapa[codigo] || '1';
 }
 
 export const AddEventModal: React.FC<Props> = ({
@@ -131,59 +163,31 @@ export const AddEventModal: React.FC<Props> = ({
     }
     const novaUnidade = unidadePadraoPorRubrica(novoCodigo);
     setUnidadeReferencia(novaUnidade);
+    setReferenciaInput(referenciaPadraoPorRubrica(novoCodigo));
 
     if (novaUnidade === 'VALOR') {
-      if (referenciaInput === '10') setReferenciaInput('1');
-      if (novoCodigo === '0015' && parseNumeroDecimal(valorManualInput) <= 0) {
-        setValorManualInput('62.04');
-      } else if (novoCodigo === '0020' && empregadoSelecionado) {
-        const adiant = Math.round((empregadoSelecionado.salarioBase || 0) * 0.4 * 100) / 100;
-        setValorManualInput(String(adiant));
+      if (novoCodigo === '0015') {
+        setValorManualInput(String(VALOR_COTA_SALARIO_FAMILIA));
+      } else if (novoCodigo === '0118' && empregadoSelecionado) {
+        setValorManualInput(String(empregadoSelecionado.salarioBase || 0));
+      } else {
+        setValorManualInput('0');
       }
-    } else if (novaUnidade === 'HORAS' && parseNumeroDecimal(referenciaInput) <= 1) {
-      setReferenciaInput('10');
-    } else if (novaUnidade === 'DIAS' && parseNumeroDecimal(referenciaInput) === 10) {
-      setReferenciaInput('1');
     }
   };
 
   const referenciaNum = parseNumeroDecimal(referenciaInput);
   const valorManualNum = parseNumeroDecimal(valorManualInput);
 
-  // Cálculo automático ao vivo
+  // Cálculo automático ao vivo pelo motor oficial CLT 2026
   const calcularValorParaColaborador = (emp?: Empregado): number => {
-    if (unidadeReferencia === 'VALOR') {
-      return Math.round(valorManualNum * 100) / 100;
-    }
-    if (!emp) return Math.round(valorManualNum * 100) / 100;
-
-    const salario = emp.salarioBase || 0;
-    const divisor = emp.divisorHoras || 220;
-    const valorHora = salario / divisor;
-    const valorDia = salario / 30;
-
-    if (rubricaCodigo === '0101') {
-      return Math.round(valorHora * 1.5 * referenciaNum * 100) / 100;
-    }
-    if (rubricaCodigo === '0102') {
-      return Math.round(valorHora * 2.0 * referenciaNum * 100) / 100;
-    }
-    if (rubricaCodigo === '0103') {
-      return Math.round(valorHora * 0.2 * referenciaNum * 100) / 100;
-    }
-    if (rubricaCodigo === '0201') {
-      return Math.round(valorDia * referenciaNum * 100) / 100;
-    }
-    if (unidadeReferencia === 'PERCENTUAL') {
-      return Math.round(salario * (referenciaNum / 100) * 100) / 100;
-    }
-    if (unidadeReferencia === 'DIAS') {
-      return Math.round(valorDia * referenciaNum * 100) / 100;
-    }
-    if (unidadeReferencia === 'HORAS') {
-      return Math.round(valorHora * referenciaNum * 100) / 100;
-    }
-    return Math.round(valorManualNum * 100) / 100;
+    return calcularValorRubricaEvento({
+      rubricaCodigo,
+      referencia: referenciaNum,
+      unidadeReferencia,
+      valorManual: valorManualNum,
+      empregado: emp,
+    });
   };
 
   const valorEstimado = calcularValorParaColaborador(empregadoSelecionado);
@@ -597,27 +601,39 @@ export const AddEventModal: React.FC<Props> = ({
               )}
             </div>
 
-            {/* Informações da Rubrica e Incidências */}
-            <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-slate-500 dark:text-slate-400">Tipo:</span>
+            {/* Informações da Rubrica, Percentual Exato e Incidências */}
+            <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span
-                  className={`font-bold ${
+                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
                     rubricaSelecionada.tipo === 'PROVENTO'
-                      ? 'text-emerald-700 dark:text-emerald-400'
-                      : 'text-rose-700 dark:text-rose-400'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
                   }`}
                 >
                   {rubricaSelecionada.tipo}
                 </span>
-                <span>·</span>
-                <span className="text-slate-500 dark:text-slate-400">Incidências:</span>
+                {rubricaSelecionada.percentualPadrao !== undefined && (
+                  <span className="font-mono font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 text-[11px]">
+                    Alíquota/Fator: {rubricaSelecionada.percentualPadrao}%
+                    {rubricaSelecionada.basePercentual === 'SALARIO_MINIMO'
+                      ? ` s/ Mínimo (${formatarMoeda(SALARIO_MINIMO_NACIONAL)})`
+                      : ''}
+                  </span>
+                )}
                 <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
-                  INSS: {rubricaSelecionada.incideINSS ? 'SIM' : 'NÃO'} | FGTS: {rubricaSelecionada.incideFGTS ? 'SIM' : 'NÃO'} | IRRF: {rubricaSelecionada.incideIRRF ? 'SIM' : 'NÃO'}
+                  INSS: <strong>{rubricaSelecionada.incideINSS ? 'SIM' : 'NÃO'}</strong> · FGTS: <strong>{rubricaSelecionada.incideFGTS ? 'SIM' : 'NÃO'}</strong> · IRRF: <strong>{rubricaSelecionada.incideIRRF ? 'SIM' : 'NÃO'}</strong>
+                  {rubricaSelecionada.incideDSR ? ' · DSR: SIM' : ''}
+                  {rubricaSelecionada.dedutivelIRRF ? ' · Deduz IRRF: SIM' : ''}
                 </span>
               </div>
+              {rubricaSelecionada.formulaResumo && (
+                <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400">
+                  Regra de Cálculo: {rubricaSelecionada.formulaResumo}
+                </div>
+              )}
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                Fundamento: {rubricaSelecionada.baseCalculoLegal}
+                Fundamento Legal: {rubricaSelecionada.baseCalculoLegal}
               </div>
             </div>
           </div>

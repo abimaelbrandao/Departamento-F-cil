@@ -46,6 +46,7 @@ import { CompetenceModal } from './components/CompetenceModal';
 import { AddEventModal } from './components/AddEventModal';
 import { EmployeeActionModal } from './components/EmployeeActionModal';
 import { BatchPayrollModal } from './components/BatchPayrollModal';
+import { LaborRightsGuideModal } from './components/LaborRightsGuideModal';
 import {
   Building2,
   Users,
@@ -90,6 +91,7 @@ import {
   PlusCircle,
   RotateCcw,
   Download,
+  BookOpen,
 } from 'lucide-react';
 
 const EMPRESA_PADRAO: Empresa = {
@@ -223,6 +225,7 @@ export default function App() {
   const [modalDocumentoStatus, setModalDocumentoStatus] = useState<ContratoDocumento | null>(null);
   const [modalAdmissaoEmpregado, setModalAdmissaoEmpregado] = useState<Empregado | null>(null);
   const [modalIAAberto, setModalIAAberto] = useState(false);
+  const [modalGuiaCltAberto, setModalGuiaCltAberto] = useState(false);
   const [modalReaberturaAberto, setModalReaberturaAberto] = useState(false);
   const [motivoReabertura, setMotivoReabertura] = useState('');
   const [notificacao, setNotificacao] = useState<{ mensagem: string; tipo: 'sucesso' | 'erro' | 'info' } | null>(null);
@@ -1044,7 +1047,18 @@ export default function App() {
           </div>
 
           {/* Rodapé da Barra Lateral */}
-          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+            <button
+              onClick={() => setModalGuiaCltAberto(true)}
+              className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-950/70 border border-blue-200 dark:border-blue-900/60 transition-colors ${
+                sidebarRecolhida ? 'justify-center' : 'justify-start'
+              }`}
+              title="Tabela de Direitos & Alíquotas CLT 2026"
+            >
+              <BookOpen className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              {!sidebarRecolhida && <span>Direitos &amp; Alíquotas 2026</span>}
+            </button>
+
             <button
               onClick={() => setModalIAAberto(true)}
               className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-900/60 transition-colors ${
@@ -1654,6 +1668,15 @@ export default function App() {
                   >
                     <Receipt className="w-4 h-4" />
                     Gerar Recibos de Pagamento
+                  </button>
+
+                  <button
+                    onClick={() => setModalGuiaCltAberto(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold rounded-xl transition-colors"
+                    title="Consultar tabela completa de proventos, descontos e alíquotas exatas CLT 2026"
+                  >
+                    <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    Direitos &amp; % CLT
                   </button>
 
                   <button
@@ -3208,6 +3231,12 @@ export default function App() {
         isOpen={modalIAAberto}
         onClose={() => setModalIAAberto(false)}
         competenciaAtual={competenciaAtiva}
+      />
+
+      {/* 8.0 Modal de Direitos Trabalhistas & Alíquotas CLT 2026 */}
+      <LaborRightsGuideModal
+        isOpen={modalGuiaCltAberto}
+        onClose={() => setModalGuiaCltAberto(false)}
       />
 
       {/* 8.1 Modal de Documentos de Admissão (Contrato de Experiência & Registro de Empregado) */}

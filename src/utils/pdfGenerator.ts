@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { FolhaEmpregado, Empresa, Empregado, RescisaoSimulada, DadosDocumentoFerias } from '../types/dp';
 import { formatarMoeda, formatarData, formatarCNPJ, formatarCPF, formatarCompetenciaExtenso, formatarValorDecimal, numeroParaExtenso, formatarDataPorExtenso, formatarCEP } from './formatters';
+import { calcularINSSProgressivo, calcularIRRF } from '../services/calculosTrabalhistas';
 
 /**
  * 1. LISTAGEM DE FOLHA DE PAGAMENTO
@@ -2141,39 +2142,28 @@ export function desenharDemonstrativoFeriasPagina(
   // Base para INSS e FGTS
   const baseTributavel = valorFerias + tercoFerias;
 
-  // INSS
+  // INSS 2026
+  const ehEstagioPDF = empregado.vinculo === 'ESTAGIO';
+  const depsIRRFPDF = (empregado.dependentes || []).filter(d => d.irrf).length;
   let valorINSS = dados.valorINSS;
-  let aliquotaINSSStr = dados.aliquotaINSS || '9%';
+  let aliquotaINSSStr = dados.aliquotaINSS || '';
   if (valorINSS === undefined) {
-    if (baseTributavel <= 1518.00) {
-      valorINSS = Math.round((baseTributavel * 0.075) * 100) / 100;
-      aliquotaINSSStr = '7,5%';
-    } else if (baseTributavel <= 2793.88) {
-      valorINSS = Math.round((baseTributavel * 0.09 - 24.33) * 100) / 100;
-      aliquotaINSSStr = '9%';
-    } else if (baseTributavel <= 4190.83) {
-      valorINSS = Math.round((baseTributavel * 0.12 - 108.15) * 100) / 100;
-      aliquotaINSSStr = '12%';
-    } else if (baseTributavel <= 8157.41) {
-      valorINSS = Math.round((baseTributavel * 0.14 - 191.96) * 100) / 100;
-      aliquotaINSSStr = '14%';
+    if (ehEstagioPDF) {
+      valorINSS = 0;
+      aliquotaINSSStr = 'Isento';
     } else {
-      valorINSS = 950.08;
-      aliquotaINSSStr = 'Teto';
+      const resINSS = calcularINSSProgressivo(baseTributavel);
+      valorINSS = resINSS.valorTotal;
+      aliquotaINSSStr = aliquotaINSSStr || (baseTributavel >= 8475.55 ? 'Teto' : `${resINSS.aliquotaEfetiva.toFixed(2).replace('.', ',')}%`);
     }
+  } else if (!aliquotaINSSStr) {
+    aliquotaINSSStr = '9%';
   }
 
-  // IRRF
+  // IRRF 2026 (Lei 15.270/2025 + Desconto Simplificado)
   let valorIRRF = dados.valorIRRF !== undefined ? dados.valorIRRF : 0;
-  if (dados.valorIRRF === undefined) {
-    const baseIRRF = baseTributavel - (valorINSS || 0);
-    if (baseIRRF > 2259.20) {
-      if (baseIRRF <= 2826.65) valorIRRF = Math.round(((baseIRRF * 0.075) - 169.44) * 100) / 100;
-      else if (baseIRRF <= 3751.05) valorIRRF = Math.round(((baseIRRF * 0.15) - 381.44) * 100) / 100;
-      else if (baseIRRF <= 4664.68) valorIRRF = Math.round(((baseIRRF * 0.225) - 662.77) * 100) / 100;
-      else valorIRRF = Math.round(((baseIRRF * 0.275) - 896.00) * 100) / 100;
-      valorIRRF = Math.max(0, valorIRRF);
-    }
+  if (dados.valorIRRF === undefined && !ehEstagioPDF) {
+    valorIRRF = calcularIRRF(baseTributavel, valorINSS || 0, depsIRRFPDF).valorTotal;
   }
 
   const totalProventos = dados.totalProventos !== undefined
@@ -2346,31 +2336,16 @@ export function desenharReciboFeriasPagina(
 
   const baseTributavel = valorFerias + tercoFerias;
 
+  const ehEstagioRec = empregado.vinculo === 'ESTAGIO';
+  const depsIRRFRec = (empregado.dependentes || []).filter(d => d.irrf).length;
   let valorINSS = dados.valorINSS;
   if (valorINSS === undefined) {
-    if (baseTributavel <= 1518.00) {
-      valorINSS = Math.round((baseTributavel * 0.075) * 100) / 100;
-    } else if (baseTributavel <= 2793.88) {
-      valorINSS = Math.round((baseTributavel * 0.09 - 24.33) * 100) / 100;
-    } else if (baseTributavel <= 4190.83) {
-      valorINSS = Math.round((baseTributavel * 0.12 - 108.15) * 100) / 100;
-    } else if (baseTributavel <= 8157.41) {
-      valorINSS = Math.round((baseTributavel * 0.14 - 191.96) * 100) / 100;
-    } else {
-      valorINSS = 950.08;
-    }
+    valorINSS = ehEstagioRec ? 0 : calcularINSSProgressivo(baseTributavel).valorTotal;
   }
 
   let valorIRRF = dados.valorIRRF !== undefined ? dados.valorIRRF : 0;
-  if (dados.valorIRRF === undefined) {
-    const baseIRRF = baseTributavel - (valorINSS || 0);
-    if (baseIRRF > 2259.20) {
-      if (baseIRRF <= 2826.65) valorIRRF = Math.round(((baseIRRF * 0.075) - 169.44) * 100) / 100;
-      else if (baseIRRF <= 3751.05) valorIRRF = Math.round(((baseIRRF * 0.15) - 381.44) * 100) / 100;
-      else if (baseIRRF <= 4664.68) valorIRRF = Math.round(((baseIRRF * 0.225) - 662.77) * 100) / 100;
-      else valorIRRF = Math.round(((baseIRRF * 0.275) - 896.00) * 100) / 100;
-      valorIRRF = Math.max(0, valorIRRF);
-    }
+  if (dados.valorIRRF === undefined && !ehEstagioRec) {
+    valorIRRF = calcularIRRF(baseTributavel, valorINSS || 0, depsIRRFRec).valorTotal;
   }
 
   const totalProventos = dados.totalProventos !== undefined

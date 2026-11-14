@@ -39,7 +39,8 @@ export const VacationPlannerModal: React.FC<Props> = ({
     dataInicio,
     diasGozo,
     abonoPecuniario,
-    adiantamento13
+    adiantamento13,
+    periodoFerias?.faltasInjustificadas || 0
   );
 
   const handleSalvarProgramacao = async () => {
