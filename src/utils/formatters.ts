@@ -256,5 +256,32 @@ export function validarCNPJ(cnpj: string | undefined | null): boolean {
   return true;
 }
 
+export function obterIniciais(nome: string | undefined | null): string {
+  if (!nome || !nome.trim()) return 'DP';
+  const ignorar = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+  const partes = nome
+    .trim()
+    .split(/\s+/)
+    .filter(p => p.length > 0 && !ignorar.has(p.toLowerCase()));
+  if (partes.length === 0) return nome.trim().slice(0, 2).toUpperCase();
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase();
+}
 
+const AVATAR_PALETAS = [
+  'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300',
+  'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300',
+  'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-300',
+  'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
+];
 
+export function obterCorAvatar(chave: string | undefined | null): string {
+  const s = (chave || 'DP').trim();
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_PALETAS[hash % AVATAR_PALETAS.length];
+}

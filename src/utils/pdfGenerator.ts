@@ -318,25 +318,32 @@ export function desenharReciboPagamentoNaPagina(
   doc: jsPDF,
   folha: FolhaEmpregado,
   empresa: Empresa,
-  empregado: Empregado
+  empregado: Empregado,
+  options?: {
+    startY?: number;
+    subtitulo?: string;
+    competenciaOverride?: string;
+    ocultarINSSSeZero?: boolean;
+    hCorpoVerbas?: number;
+    sombrearEmpregado?: boolean;
+  }
 ) {
   const marginLeft = 20;
   const contentWidth = 170; // 20mm margem esquerda, 20mm margem direita => 170mm largura total
-  const startY = 10;
+  const startY = options?.startY ?? 10;
 
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.2);
 
-  // 1. CABEÇALHO DO RECIBO (Y: 10 a 19 mm, altura 9 mm)
+  // 1. CABEÇALHO DO RECIBO (Y: startY a startY + 9 mm, altura 9 mm)
   // Divisão: Caixa da esquerda (Recibo de Pagamento) e Caixa da direita (Data e Assinatura)
   const wCabEsq = 75.5;
-  const wCabDir = contentWidth - wCabEsq; // 94.5 mm
   const hCab = 9;
 
   doc.rect(marginLeft, startY, contentWidth, hCab, 'S');
   doc.line(marginLeft + wCabEsq, startY, marginLeft + wCabEsq, startY + hCab);
 
-  // À esquerda: "Recibo de Pagamento" centralizado em negrito e "( Folha de Pagamento )"
+  // À esquerda: "Recibo de Pagamento" centralizado em negrito e subtítulo configurável
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
@@ -344,7 +351,7 @@ export function desenharReciboPagamentoNaPagina(
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text('( Folha de Pagamento )', marginLeft + (wCabEsq / 2), startY + 7.6, { align: 'center' });
+  doc.text(options?.subtitulo || '( Folha de Pagamento )', marginLeft + (wCabEsq / 2), startY + 7.6, { align: 'center' });
 
   // À direita: "Data e Assinatura"
   const xDir = marginLeft + wCabEsq;
@@ -402,19 +409,22 @@ export function desenharReciboPagamentoNaPagina(
   doc.text('Competência', xComp + 1.5, curY + 2.2);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  const compExtenso = formatarCompetenciaExtenso(folha.competencia);
+  const compExtenso = options?.competenciaOverride || formatarCompetenciaExtenso(folha.competencia);
   doc.text(compExtenso, xComp + 1.5, curY + 5.5);
 
   curY += hLinha1;
 
   // 3. SEGUNDA LINHA DE IDENTIFICAÇÃO (Empregado | Cargo | Lotação)
-  // Y: 25.5 a 32 mm, altura 6.5 mm
   const hLinha2 = 6.5;
-  doc.rect(marginLeft, curY, contentWidth, hLinha2, 'S');
-
   const xCargo = marginLeft + 75.5;
   const xLot = marginLeft + 123;
 
+  if (options?.sombrearEmpregado) {
+    doc.setFillColor(200, 200, 200);
+    doc.rect(marginLeft, curY, xCargo - marginLeft, hLinha2, 'F');
+  }
+
+  doc.rect(marginLeft, curY, contentWidth, hLinha2, 'S');
   doc.line(xCargo, curY, xCargo, curY + hLinha2);
   doc.line(xLot, curY, xLot, curY + hLinha2);
 
@@ -539,8 +549,8 @@ export function desenharReciboPagamentoNaPagina(
 
   curY += hHeadVerbas;
 
-  // 7. CORPO DA TABELA DE VERBAS (altura fixa de 50 mm com divisórias contínuas)
-  const hCorpoVerbas = 50;
+  // 7. CORPO DA TABELA DE VERBAS (altura padrão 50 mm ou configurável com divisórias contínuas)
+  const hCorpoVerbas = options?.hCorpoVerbas ?? 50;
   const tableStartY = curY;
 
   doc.rect(marginLeft, tableStartY, contentWidth, hCorpoVerbas, 'S');
@@ -631,7 +641,7 @@ export function desenharReciboPagamentoNaPagina(
 
   const bases = [
     { label: 'Salário Contratual', valor: folha.salarioBase || empregado.salarioBase || 0, sempreExibir: true },
-    { label: 'Base de Cálculo do INSS', valor: folha.bases.baseINSS, sempreExibir: true },
+    { label: 'Base de Cálculo do INSS', valor: folha.bases.baseINSS, sempreExibir: options?.ocultarINSSSeZero ? folha.bases.baseINSS > 0 : true },
     { label: 'Base de Cálculo do FGTS', valor: empregado.optanteFGTS ? folha.bases.baseFGTS : 0, sempreExibir: empregado.optanteFGTS },
     { label: 'FGTS', valor: empregado.optanteFGTS ? folha.encargosEmpresa?.fgtsDevido || 0 : 0, sempreExibir: empregado.optanteFGTS },
     { label: 'FGTS Contribuição Social', valor: 0, sempreExibir: false },
@@ -2469,4 +2479,556 @@ export function gerarDocumentosFeriasConjuntoPDF(
     doc.save(fileName);
   }
 }
+
+// ============================================================================
+// 13º SALÁRIO — 4 MODELOS OFICIAIS (ADIANTAMENTO 50% E PARCELA FINAL)
+// ============================================================================
+
+function fallbackEmpregadoParaFolha(folha: FolhaEmpregado, empresa: Empresa): Empregado {
+  return {
+    id: folha.empregadoId,
+    matricula: folha.matricula,
+    nomeCompleto: folha.nomeEmpregado,
+    cargo: folha.cargo,
+    departamento: folha.departamento,
+    salarioBase: folha.salarioBase,
+    cpf: '000.000.000-00',
+    dataAdmissao: '2024-01-01',
+    vinculo: 'CLT',
+    status: 'ativo',
+    rg: '',
+    orgaoExpedidor: '',
+    pis: '',
+    dataNascimento: '',
+    sexo: 'M',
+    estadoCivil: 'SOLTEIRO',
+    nacionalidade: 'Brasileira',
+    email: '',
+    telefone: '',
+    endereco: { logradouro: '', numero: '', bairro: '', cidade: '', uf: '', cep: '' },
+    dadosBancarios: { banco: '', codigoBanco: '', agencia: '', conta: '', tipoConta: 'CORRENTE' },
+    cbo: '',
+    centroDeCusto: 'Geral',
+    tipoSalario: 'MENSALISTA',
+    jornadaHorasSemanais: 44,
+    divisorHoras: 220,
+    escala: '',
+    tipoContrato: 'INDETERMINADO',
+    dependentes: [],
+    beneficios: [],
+    documentosAdmissao: [],
+    historicoAlteracoes: [],
+    optanteFGTS: true,
+    aliquotaFGTS: 0.08,
+    empresaId: empresa.id,
+  };
+}
+
+/**
+ * 13º SALÁRIO — MODELO 1: LISTAGEM DE ADIANTAMENTO DE 13º SALÁRIO (1ª PARCELA 50%)
+ * Modelo de referência: "Listagem de Adiantamento de Décimo Terceiro - 0049.pdf"
+ */
+export function gerarListagemAdiantamento13PDF(
+  empresa: Empresa,
+  competencia: string,
+  folhas: FolhaEmpregado[],
+  empregados: Empregado[],
+  options?: { returnBlobUrl?: boolean }
+): string | void {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const pageWidth = 215.9;
+  const pageHeight = 279.4;
+  const marginLeft = 10;
+  const marginRight = 10;
+  const dataEmissao = formatarData(new Date().toISOString().split('T')[0]);
+
+  const desenharCabecalho = (pageNumber: number) => {
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.25);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Adiantamento de 13º Salário', marginLeft, 13.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`Pag.: ${pageNumber}`, pageWidth - marginRight, 13.5, { align: 'right' });
+
+    doc.text(`Empresa: ${empresa.razaoSocial.toUpperCase()} - CNPJ: ${formatarCNPJ(empresa.cnpj)}`, marginLeft, 18);
+    doc.text('Departamento Fácil', pageWidth - marginRight, 18, { align: 'right' });
+
+    doc.text(`Mês/Ano: ${competencia}`, marginLeft, 22.2);
+    doc.text(`Emissão: ${dataEmissao}`, marginLeft, 26);
+
+    doc.line(marginLeft, 28, pageWidth - marginRight, 28);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Código', marginLeft + 0.3, 31.8);
+    doc.text('Empregado', marginLeft + 14.3, 31.8);
+    doc.text('Referência', marginLeft + 114, 31.8, { align: 'right' });
+    doc.text('Perc.', marginLeft + 129, 31.8, { align: 'right' });
+    doc.text('Valor', marginLeft + 147, 31.8, { align: 'right' });
+    doc.text('Assinatura', marginLeft + 150, 31.8);
+
+    doc.line(marginLeft, 33.5, pageWidth - marginRight, 33.5);
+    return 37.5;
+  };
+
+  let currentPage = 1;
+  let currentY = desenharCabecalho(currentPage);
+
+  let totalGeralValor = 0;
+  let totalGeralBCFGTS = 0;
+  let totalGeralFGTS = 0;
+
+  for (let idx = 0; idx < folhas.length; idx++) {
+    const folha = folhas[idx];
+    const emp = empregados.find(e => e.id === folha.empregadoId) || fallbackEmpregadoParaFolha(folha, empresa);
+    const blocoAltura = 33;
+
+    if (currentY + blocoAltura > pageHeight - 20) {
+      doc.addPage('letter', 'portrait');
+      currentPage++;
+      currentY = desenharCabecalho(currentPage);
+    }
+
+    const matriculaFormatada = (folha.matricula || emp.matricula || String(idx + 1)).padStart(6, '0');
+    const avos = folha.avos13 ?? 12;
+    const perc = folha.percentual13 ?? 50;
+    const valorAdiant = folha.totalProventos || folha.valorLiquido || 0;
+    const bcFgts = emp.optanteFGTS !== false ? (folha.bases?.baseFGTS ?? valorAdiant) : 0;
+    const fgtsVal = emp.optanteFGTS !== false ? (folha.encargosEmpresa?.fgtsDevido ?? 0) : 0;
+
+    totalGeralValor += valorAdiant;
+    totalGeralBCFGTS += bcFgts;
+    totalGeralFGTS += fgtsVal;
+
+    // Linha 1: Código | Nome | Referência | Perc. | Valor
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.text(matriculaFormatada, marginLeft + 0.3, currentY);
+    doc.text(folha.nomeEmpregado.toUpperCase().substring(0, 44), marginLeft + 14.3, currentY);
+    doc.text(`${avos} Avos`, marginLeft + 114, currentY, { align: 'right' });
+    doc.text(`${perc}%`, marginLeft + 129, currentY, { align: 'right' });
+    doc.text(formatarValorDecimal(valorAdiant), marginLeft + 147, currentY, { align: 'right' });
+
+    currentY += 4.2;
+    doc.text(`Cargo: ${(folha.cargo || emp.cargo || '').toUpperCase()}`, marginLeft + 0.3, currentY);
+
+    currentY += 4.8;
+    const dataAdm = formatarData(emp.dataAdmissao);
+    doc.text(`Data de Admissao: ${dataAdm}`, marginLeft + 2, currentY);
+    doc.text(`BC-FGTS: ${formatarValorDecimal(bcFgts)}`, marginLeft + 52, currentY);
+    doc.text(`FGTS: ${formatarValorDecimal(fgtsVal)}`, marginLeft + 88, currentY);
+
+    currentY += 5.2;
+    doc.text('/         /', marginLeft + 112, currentY);
+
+    // Linha horizontal longa acima do Demonstrativo de Remuneração
+    currentY += 2.2;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+    doc.line(marginLeft + 92, currentY, pageWidth - marginRight, currentY);
+
+    currentY += 4.0;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.text('Demonstrativo de Remuneração', marginLeft + 0.3, currentY);
+
+    currentY += 4.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const salBaseDemo = folha.salarioBase || emp.salarioBase || 0;
+    doc.text('011 Salário-Base', marginLeft + 28, currentY);
+    doc.text('30 dia(s)', marginLeft + 114, currentY, { align: 'right' });
+    doc.text(formatarValorDecimal(salBaseDemo), marginLeft + 147, currentY, { align: 'right' });
+
+    currentY += 1.4;
+    doc.line(marginLeft + 126, currentY, marginLeft + 150, currentY);
+
+    currentY += 3.2;
+    doc.text(formatarValorDecimal(salBaseDemo), marginLeft + 147, currentY, { align: 'right' });
+
+    currentY += 1.8;
+    doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+    currentY += 4.2;
+  }
+
+  // Resumo Totalizador discreto ao final dos trabalhadores
+  if (folhas.length > 0) {
+    if (currentY + 14 > pageHeight - 16) {
+      doc.addPage('letter', 'portrait');
+      currentPage++;
+      currentY = desenharCabecalho(currentPage);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text(`Total Geral (${folhas.length} empregado${folhas.length > 1 ? 's' : ''})`, marginLeft + 0.3, currentY + 1);
+    doc.text(formatarValorDecimal(totalGeralValor), marginLeft + 147, currentY + 1, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`BC-FGTS: ${formatarValorDecimal(totalGeralBCFGTS)}   FGTS: ${formatarValorDecimal(totalGeralFGTS)}`, marginLeft + 52, currentY + 5.2);
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Fim', pageWidth - marginRight - 0.4, pageHeight - 12, { align: 'right' });
+
+  const fileName = `Listagem_Adiantamento_13_${competencia.replace('/', '-')}_${empresa.nomeFantasia || 'Empresa'}.pdf`;
+  if (options?.returnBlobUrl) {
+    return doc.output('bloburl').toString();
+  } else {
+    doc.save(fileName);
+  }
+}
+
+/**
+ * 13º SALÁRIO — MODELO 2: RECIBO DE ADIANTAMENTO DE 13º SALÁRIO (1ª PARCELA)
+ * Modelo de referência: "Recibo de Adiantamento de Décimo Terceiro - 0049.pdf"
+ * Papel A4 Retrato (1 recibo por página ocupando a altura inteira conforme modelo anexo).
+ */
+export function gerarReciboAdiantamento13PDF(
+  folhasOuFolha: FolhaEmpregado | FolhaEmpregado[],
+  empresa: Empresa,
+  empregadosOuEmpregado: Empregado | Empregado[],
+  options?: { returnBlobUrl?: boolean }
+): string | void {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const listaFolhas = Array.isArray(folhasOuFolha) ? folhasOuFolha : [folhasOuFolha];
+  const listaEmps = Array.isArray(empregadosOuEmpregado) ? empregadosOuEmpregado : [empregadosOuEmpregado];
+
+  for (let i = 0; i < listaFolhas.length; i++) {
+    if (i > 0) doc.addPage('a4', 'portrait');
+    const folha = listaFolhas[i];
+    const emp = listaEmps.find(e => e.id === folha.empregadoId) || fallbackEmpregadoParaFolha(folha, empresa);
+
+    desenharReciboPagamentoNaPagina(doc, folha, empresa, emp, {
+      startY: 10,
+      subtitulo: '( Adiantamento de 13º Salário )',
+      competenciaOverride: formatarCompetenciaExtenso(folha.competencia),
+      ocultarINSSSeZero: true,
+      hCorpoVerbas: 205,
+      sombrearEmpregado: true,
+    });
+  }
+
+  const sufixo = listaFolhas.length === 1 ? `${listaFolhas[0].matricula}_${listaFolhas[0].nomeEmpregado.replace(/\s+/g, '_')}` : 'Lote';
+  const compNome = (listaFolhas[0]?.competencia || '11-2026').replace('/', '-');
+  const fileName = `Recibo_Adiantamento_13_${compNome}_${sufixo}.pdf`;
+
+  if (options?.returnBlobUrl) {
+    return doc.output('bloburl').toString();
+  } else {
+    doc.save(fileName);
+  }
+}
+
+/**
+ * 13º SALÁRIO — MODELO 3: LISTAGEM DE PAGAMENTO DO 13º SALÁRIO (PARCELA FINAL)
+ * Modelo de referência: "FOLHA DE PAGAMENTO 13° 2025 - FINAL.pdf"
+ */
+export function gerarListagemFinal13PDF(
+  empresa: Empresa,
+  competencia: string,
+  folhas: FolhaEmpregado[],
+  empregados: Empregado[],
+  options?: { returnBlobUrl?: boolean }
+): string | void {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const pageWidth = 215.9;
+  const pageHeight = 279.4;
+  const marginLeft = 10;
+  const marginRight = 10;
+  const dataEmissao = formatarData(new Date().toISOString().split('T')[0]);
+  const cnpjFormatado = formatarCNPJ(empresa.cnpj);
+
+  const desenharCabecalho = (pageNumber: number) => {
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.25);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Listagem de Pagamento do 13º Salário', marginLeft, 13.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`Pag.: ${pageNumber}`, pageWidth - marginRight, 13.5, { align: 'right' });
+
+    doc.text(`Empresa: ${empresa.razaoSocial.toUpperCase()} - CNPJ: ${cnpjFormatado}`, marginLeft, 18);
+    doc.text('Departamento Fácil', pageWidth - marginRight, 18, { align: 'right' });
+
+    doc.text(`Mês/Ano: ${competencia}`, marginLeft, 22.0);
+    doc.text(`Emissão: ${dataEmissao}`, marginLeft, 25.6);
+    doc.text(`Estabelecimento: ${empresa.razaoSocial.toUpperCase()} - ${cnpjFormatado}`, marginLeft, 29.2);
+
+    doc.line(marginLeft, 31.2, pageWidth - marginRight, 31.2);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Código', marginLeft + 0.3, 35.0);
+    doc.text('Empregado', marginLeft + 14.3, 35.0);
+    doc.text('Evento', marginLeft + 70.4, 35.0);
+    doc.text('Referência', marginLeft + 143, 35.0, { align: 'right' });
+    doc.text('Provento', marginLeft + 165, 35.0, { align: 'right' });
+    doc.text('Desconto', pageWidth - marginRight - 0.4, 35.0, { align: 'right' });
+
+    doc.line(marginLeft, 36.7, pageWidth - marginRight, 36.7);
+    return 41;
+  };
+
+  let currentPage = 1;
+  let currentY = desenharCabecalho(currentPage);
+
+  const mapaEventosConsolidados: Record<
+    string,
+    { codigo: string; descricao: string; totalProvento: number; totalDesconto: number }
+  > = {};
+
+  let somaGeralProventos = 0;
+  let somaGeralDescontos = 0;
+  let somaGeralFGTS = 0;
+  let somaGeralLiquido = 0;
+  let somaGeralBCINSS = 0;
+  let somaGeralBCFGTS = 0;
+
+  for (let idx = 0; idx < folhas.length; idx++) {
+    const folha = folhas[idx];
+    const emp = empregados.find(e => e.id === folha.empregadoId) || fallbackEmpregadoParaFolha(folha, empresa);
+
+    const alturaBlocoTrabalhador = 9 + (folha.itens.length * 4.2) + 36;
+    if (currentY + alturaBlocoTrabalhador > pageHeight - 16) {
+      doc.addPage('letter', 'portrait');
+      currentPage++;
+      currentY = desenharCabecalho(currentPage);
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+
+    const matriculaFormatada = (folha.matricula || emp.matricula || String(idx + 1)).padStart(6, '0');
+    doc.text(matriculaFormatada, marginLeft + 0.3, currentY);
+    doc.text(folha.nomeEmpregado.toUpperCase(), marginLeft + 14.3, currentY);
+
+    currentY += 4.3;
+    doc.text(`Cargo: ${(folha.cargo || emp.cargo || '').toUpperCase()}`, marginLeft + 0.3, currentY);
+
+    for (const item of folha.itens) {
+      if (!mapaEventosConsolidados[item.rubricaCodigo]) {
+        mapaEventosConsolidados[item.rubricaCodigo] = {
+          codigo: item.rubricaCodigo,
+          descricao: item.descricao,
+          totalProvento: 0,
+          totalDesconto: 0,
+        };
+      }
+      mapaEventosConsolidados[item.rubricaCodigo].totalProvento += item.provento || 0;
+      mapaEventosConsolidados[item.rubricaCodigo].totalDesconto += item.desconto || 0;
+
+      currentY += 4.2;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`${item.rubricaCodigo} ${item.descricao}`, marginLeft + 70.4, currentY);
+
+      const refStr = typeof item.referencia === 'number' ? formatarValorDecimal(item.referencia) : String(item.referencia || '');
+      if (refStr) {
+        doc.text(refStr, marginLeft + 143, currentY, { align: 'right' });
+      }
+      if (item.provento > 0) {
+        doc.text(formatarValorDecimal(item.provento), marginLeft + 165, currentY, { align: 'right' });
+      }
+      if (item.desconto > 0) {
+        doc.text(formatarValorDecimal(item.desconto), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+      }
+    }
+
+    currentY += 4.5;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+    doc.line(marginLeft + 148, currentY - 3, marginLeft + 165, currentY - 3);
+    doc.line(pageWidth - marginRight - 18, currentY - 3, pageWidth - marginRight - 0.4, currentY - 3);
+
+    doc.text(formatarValorDecimal(folha.totalProventos), marginLeft + 165, currentY, { align: 'right' });
+    doc.text(formatarValorDecimal(folha.totalDescontos), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+
+    currentY += 4.2;
+    const fgtsIndiv = emp.optanteFGTS !== false ? (folha.encargosEmpresa?.fgtsDevido || 0) : 0;
+    doc.text(`FGTS: ${emp.optanteFGTS !== false ? formatarValorDecimal(fgtsIndiv) : ''}`, marginLeft + 125, currentY);
+    doc.text('Líquido a receber:', marginLeft + 148, currentY);
+    doc.text(formatarValorDecimal(folha.valorLiquido), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+
+    currentY += 5.5;
+    doc.text('Data: _____ / _____ / _________', marginLeft + 70.4, currentY);
+    doc.text('Assinatura: _________________________________________', marginLeft + 105, currentY);
+
+    currentY += 5.5;
+    doc.line(marginLeft, currentY - 3.2, pageWidth - marginRight, currentY - 3.2);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.text('Admissão', marginLeft + 4, currentY);
+    doc.text('Dep.', marginLeft + 24, currentY);
+    doc.text('Filhos', marginLeft + 36, currentY);
+    doc.text('Horas/mês', marginLeft + 48, currentY);
+    doc.text('Sal. Cont.', marginLeft + 65, currentY);
+    doc.text('BC-FGTS', marginLeft + 83, currentY);
+    doc.text('BC-INSS', marginLeft + 101, currentY);
+
+    currentY += 3.8;
+    const adm = formatarData(emp.dataAdmissao);
+    const dep = emp.dependentes?.filter(d => d.irrf)?.length || 0;
+    const filhos = emp.dependentes?.filter(d => d.salarioFamilia)?.length || 0;
+    const hrs = emp.divisorHoras ? `${emp.divisorHoras}:00` : '220:00';
+    const salCont = folha.totalProventos || folha.salarioBase || emp.salarioBase || 0;
+    const bcFgts = emp.optanteFGTS !== false ? formatarValorDecimal(folha.bases.baseFGTS) : '';
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(adm, marginLeft + 2, currentY);
+    doc.text(String(dep), marginLeft + 26, currentY);
+    doc.text(String(filhos), marginLeft + 38, currentY);
+    doc.text(hrs, marginLeft + 48, currentY);
+    doc.text(formatarValorDecimal(salCont), marginLeft + 65, currentY);
+    if (bcFgts) {
+      doc.text(bcFgts, marginLeft + 83, currentY);
+    }
+    doc.text(formatarValorDecimal(folha.bases.baseINSS), marginLeft + 101, currentY);
+
+    doc.line(marginLeft, currentY + 2, pageWidth - marginRight, currentY + 2);
+
+    // Demonstrativo de Remuneração abaixo de cada colaborador (conforme anexo)
+    currentY += 5.4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.text('Demonstrativo de Remuneração', marginLeft + 0.3, currentY);
+
+    currentY += 4.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('011 Salário-Base', marginLeft + 70.4, currentY);
+    doc.text('30 dia(s)', marginLeft + 143, currentY, { align: 'right' });
+    doc.text(formatarValorDecimal(salCont), marginLeft + 165, currentY, { align: 'right' });
+
+    currentY += 1.4;
+    doc.line(marginLeft + 148, currentY, marginLeft + 165, currentY);
+
+    currentY += 3.2;
+    doc.text(formatarValorDecimal(salCont), marginLeft + 165, currentY, { align: 'right' });
+
+    currentY += 2.0;
+    doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+    currentY += 5.0;
+
+    somaGeralProventos += folha.totalProventos;
+    somaGeralDescontos += folha.totalDescontos;
+    somaGeralFGTS += fgtsIndiv;
+    somaGeralLiquido += folha.valorLiquido;
+    somaGeralBCINSS += folha.bases.baseINSS;
+    somaGeralBCFGTS += emp.optanteFGTS !== false ? folha.bases.baseFGTS : 0;
+  }
+
+  // TOTAL GERAL
+  const eventosConsolidados = Object.values(mapaEventosConsolidados).sort((a, b) => a.codigo.localeCompare(b.codigo));
+  const alturaTotalGeral = 15 + (eventosConsolidados.length * 4.2) + 20;
+  if (currentY + alturaTotalGeral > pageHeight - 20) {
+    doc.addPage('letter', 'portrait');
+    currentPage++;
+    currentY = desenharCabecalho(currentPage);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('Total Geral', marginLeft + 0.3, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`(${folhas.length} empregado${folhas.length > 1 ? 's' : ''})`, marginLeft + 18, currentY);
+
+  for (const ev of eventosConsolidados) {
+    currentY += 4.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`${ev.codigo} ${ev.descricao}`, marginLeft + 70.4, currentY);
+    if (ev.totalProvento > 0) {
+      doc.text(formatarValorDecimal(ev.totalProvento), marginLeft + 165, currentY, { align: 'right' });
+    }
+    if (ev.totalDesconto > 0) {
+      doc.text(formatarValorDecimal(ev.totalDesconto), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+    }
+  }
+
+  currentY += 4.5;
+  doc.line(marginLeft + 148, currentY - 3, marginLeft + 165, currentY - 3);
+  doc.line(pageWidth - marginRight - 18, currentY - 3, pageWidth - marginRight - 0.4, currentY - 3);
+  doc.text(formatarValorDecimal(somaGeralProventos), marginLeft + 165, currentY, { align: 'right' });
+  doc.text(formatarValorDecimal(somaGeralDescontos), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+
+  currentY += 4.2;
+  doc.text(`FGTS: ${formatarValorDecimal(somaGeralFGTS)}`, marginLeft + 125, currentY);
+  doc.text('Líquido a receber:', marginLeft + 148, currentY);
+  doc.text(formatarValorDecimal(somaGeralLiquido), pageWidth - marginRight - 0.4, currentY, { align: 'right' });
+
+  currentY += 4.5;
+  doc.text(`BC-INSS: ${formatarValorDecimal(somaGeralBCINSS)}`, marginLeft + 135, currentY);
+  doc.text(`BC-FGTS: ${formatarValorDecimal(somaGeralBCFGTS)}`, marginLeft + 172, currentY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Fim', pageWidth - marginRight - 0.4, pageHeight - 12, { align: 'right' });
+
+  const fileName = `Folha_13_Final_${competencia.replace('/', '-')}_${empresa.nomeFantasia || 'Empresa'}.pdf`;
+  if (options?.returnBlobUrl) {
+    return doc.output('bloburl').toString();
+  } else {
+    doc.save(fileName);
+  }
+}
+
+/**
+ * 13º SALÁRIO — MODELO 4: RECIBO DE PAGAMENTO DO 13º SALÁRIO (PARCELA FINAL)
+ * Modelo de referência: "RECIBO DE PAGAMENTO 13° 2025 - FINAL.pdf"
+ * Papel A4 Retrato (2 recibos por página A4 em lote: superior Y=10 e inferior Y=154).
+ */
+export function gerarReciboFinal13PDF(
+  folhasOuFolha: FolhaEmpregado | FolhaEmpregado[],
+  empresa: Empresa,
+  empregadosOuEmpregado: Empregado | Empregado[],
+  options?: { returnBlobUrl?: boolean }
+): string | void {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const listaFolhas = Array.isArray(folhasOuFolha) ? folhasOuFolha : [folhasOuFolha];
+  const listaEmps = Array.isArray(empregadosOuEmpregado) ? empregadosOuEmpregado : [empregadosOuEmpregado];
+
+  for (let i = 0; i < listaFolhas.length; i++) {
+    const slotNaPagina = i % 2;
+    if (i > 0 && slotNaPagina === 0) {
+      doc.addPage('a4', 'portrait');
+    }
+
+    const folha = listaFolhas[i];
+    const emp = listaEmps.find(e => e.id === folha.empregadoId) || fallbackEmpregadoParaFolha(folha, empresa);
+    const anoCompetencia = String(folha.competencia).split('/').pop() || String(new Date().getFullYear());
+
+    desenharReciboPagamentoNaPagina(doc, folha, empresa, emp, {
+      startY: slotNaPagina === 0 ? 10 : 154,
+      subtitulo: '( 13º Salário )',
+      competenciaOverride: anoCompetencia,
+      ocultarINSSSeZero: false,
+      hCorpoVerbas: 60,
+      sombrearEmpregado: true,
+    });
+  }
+
+  const sufixo = listaFolhas.length === 1 ? `${listaFolhas[0].matricula}_${listaFolhas[0].nomeEmpregado.replace(/\s+/g, '_')}` : 'Lote';
+  const anoNome = String(listaFolhas[0]?.competencia || '2026').split('/').pop();
+  const fileName = `Recibo_13_Final_${anoNome}_${sufixo}.pdf`;
+
+  if (options?.returnBlobUrl) {
+    return doc.output('bloburl').toString();
+  } else {
+    doc.save(fileName);
+  }
+}
+
 

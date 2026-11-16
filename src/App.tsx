@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Empresa,
   Empregado,
@@ -20,7 +20,14 @@ import {
   ModuloSistemaId,
 } from './types/dp';
 import { api } from './services/api';
-import { formatarMoeda, formatarData, formatarCPF, formatarCompetenciaExtenso } from './utils/formatters';
+import {
+  formatarMoeda,
+  formatarData,
+  formatarCPF,
+  formatarCompetenciaExtenso,
+  obterIniciais,
+  obterCorAvatar,
+} from './utils/formatters';
 import {
   gerarListagemFolhaPDF,
   gerarReciboPagamentoIndividualPDF,
@@ -55,6 +62,9 @@ import {
   carregarConfiguracaoAcesso,
   salvarConfiguracaoAcesso,
 } from './components/AccessControlModal';
+import { DashboardCharts } from './components/DashboardCharts';
+import { Card3D } from './components/Card3D';
+import { DecimoTerceiroView } from './components/DecimoTerceiroView';
 import {
   Building2,
   Users,
@@ -103,6 +113,8 @@ import {
   SlidersHorizontal,
   Briefcase,
   User,
+  Box,
+  Gift,
 } from 'lucide-react';
 
 const EMPRESA_PADRAO: Empresa = {
@@ -141,9 +153,27 @@ const EMPRESA_PADRAO: Empresa = {
 };
 
 export default function App() {
-  // Tema global (Claro, Escuro, Automático)
+  // Tema global (Claro, Escuro, Automático) e preferência de Efeitos 3D
   const { theme, setTheme } = useTheme();
   const [menuTemaAberto, setMenuTemaAberto] = useState(false);
+  const [efeitos3D, setEfeitos3D] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('df_efeitos_3d');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleEfeitos3D = () => {
+    setEfeitos3D(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('df_efeitos_3d', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Estado global do usuário, controle de acesso e contexto de trabalho
   const [usuarioRole, setUsuarioRole] = useState<UserRole>('dp_operator');
@@ -215,10 +245,45 @@ export default function App() {
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoMensalEmpresa[]>([]);
   const [rescisoes, setRescisoes] = useState<RescisaoSimulada[]>([]);
 
-  // Estados de carregamento e feedback
-  const [_carregandoGeral, setCarregandoGeral] = useState(true);
+  // Estados de carregamento, busca e feedback
+  const [carregandoGeral, setCarregandoGeral] = useState(true);
   const [processandoFolha, setProcessandoFolha] = useState(false);
   const [termoBuscaEmpregado, setTermoBuscaEmpregado] = useState('');
+  const [termoBuscaFolha, setTermoBuscaFolha] = useState('');
+  const [menuRelatoriosFolhaAberto, setMenuRelatoriosFolhaAberto] = useState(false);
+
+  const headerRef = useRef<HTMLElement | null>(null);
+  const folhaToolsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (headerRef.current && !headerRef.current.contains(target)) {
+        setMenuEmpresasAberto(false);
+        setMenuCompetenciasAberto(false);
+        setMenuTemaAberto(false);
+        setMenuPerfilAberto(false);
+      }
+      if (folhaToolsRef.current && !folhaToolsRef.current.contains(target)) {
+        setMenuRelatoriosFolhaAberto(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuEmpresasAberto(false);
+        setMenuCompetenciasAberto(false);
+        setMenuTemaAberto(false);
+        setMenuPerfilAberto(false);
+        setMenuRelatoriosFolhaAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   // Modais interativos
   const [modalMemoriaItem, setModalMemoriaItem] = useState<{ item: ItemCalculadoFolha; salario: number; nome: string } | null>(null);
@@ -383,6 +448,7 @@ export default function App() {
       const ordemModulos: ModuloSistemaId[] = [
         'DASHBOARD',
         'FOLHA',
+        'DECIMO_TERCEIRO',
         'EMPREGADOS',
         'FERIAS',
         'RESCISAO',
@@ -621,6 +687,7 @@ export default function App() {
       itens: [
         { id: 'DASHBOARD' as const, label: 'Visão Geral & Prazos', icon: CalendarDays },
         { id: 'FOLHA' as const, label: 'Folha de Pagamento', icon: Receipt },
+        { id: 'DECIMO_TERCEIRO' as const, label: '13º Salário', icon: Gift },
         { id: 'FERIAS' as const, label: 'Férias & Afastamentos', icon: Palmtree },
         { id: 'RESCISAO' as const, label: 'Rescisão & TRCT', icon: UserX },
       ],
@@ -722,30 +789,61 @@ export default function App() {
   const etapaAtualIndex = statusIndexMap[statusComp] ?? 0;
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-['Inter','Plus_Jakarta_Sans',sans-serif] transition-colors">
+    <div className="min-h-screen w-full overflow-x-clip bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-['Inter','Plus_Jakarta_Sans',sans-serif] transition-colors">
+      {/* Notificação Toast Flutuante (não desloca o conteúdo da tela) */}
+      {notificacao && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed top-20 right-4 sm:right-6 z-50 max-w-md p-3.5 rounded-xl shadow-2xl border text-xs font-semibold flex items-center justify-between gap-3 backdrop-blur-md transition-all ${
+            notificacao.tipo === 'sucesso'
+              ? 'bg-emerald-50/95 dark:bg-emerald-950/95 text-emerald-900 dark:text-emerald-100 border-emerald-200 dark:border-emerald-800'
+              : notificacao.tipo === 'erro'
+              ? 'bg-rose-50/95 dark:bg-rose-950/95 text-rose-900 dark:text-rose-100 border-rose-200 dark:border-rose-800'
+              : 'bg-blue-50/95 dark:bg-blue-950/95 text-blue-900 dark:text-blue-100 border-blue-200 dark:border-blue-800'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {notificacao.tipo === 'sucesso' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            )}
+            <span className="leading-snug">{notificacao.mensagem}</span>
+          </div>
+          <button
+            onClick={() => setNotificacao(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+            aria-label="Fechar notificação"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* 1. CABEÇALHO SIMPLIFICADO: EMPRESA, COMPETÊNCIA E SITUAÇÃO VISÍVEIS */}
-      <header className="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
-        <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <header ref={headerRef} className="w-full bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
+        <div className="w-full px-3 sm:px-6 min-h-16 py-2 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-3 min-w-0">
           {/* Logo e Botão de Recolher Sidebar (desktop) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={toggleSidebar}
-              className="hidden md:flex p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+              className="hidden md:flex p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors shrink-0"
               title={sidebarRecolhida ? 'Expandir barra lateral' : 'Recolher barra lateral'}
               aria-label="Alternar barra lateral"
             >
               {sidebarRecolhida ? <PanelLeftOpen className="w-5 h-5 text-blue-400" /> : <PanelLeftClose className="w-5 h-5" />}
             </button>
 
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-white shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-white shadow-xs shrink-0">
                 DF
               </div>
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-blue-400 block leading-tight">
+              <div className="min-w-0">
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-400 block leading-tight truncate">
                   Departamento Fácil
                 </span>
-                <span className="text-[11px] text-slate-400 hidden lg:block">
+                <span className="text-[11px] text-slate-400 hidden xl:block truncate">
                   Gestão Trabalhista & Folha de Pagamento
                 </span>
               </div>
@@ -753,7 +851,7 @@ export default function App() {
           </div>
 
           {/* Contexto Ativo: Empresa + Competência + Situação da Folha */}
-          <div className="flex items-center gap-2 sm:gap-3 bg-slate-800/90 px-2 py-1.5 rounded-xl border border-slate-700/80">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 bg-slate-800/90 px-2 py-1.5 rounded-xl border border-slate-700/80 min-w-0 max-w-full">
             {empresas.length === 0 ? (
               <button
                 onClick={() => {
@@ -774,8 +872,10 @@ export default function App() {
                     onClick={() => {
                       setMenuEmpresasAberto(!menuEmpresasAberto);
                       setMenuCompetenciasAberto(false);
+                      setMenuTemaAberto(false);
+                      setMenuPerfilAberto(false);
                     }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors max-w-[140px] sm:max-w-[220px]"
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors max-w-[130px] sm:max-w-[180px] lg:max-w-[230px]"
                     title="Empresa Selecionada (Clique para trocar, criar ou gerenciar)"
                   >
                     <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
@@ -789,11 +889,11 @@ export default function App() {
                   </button>
 
                   {menuEmpresasAberto && (
-                    <div className="absolute left-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-1.5 text-xs">
-                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 flex items-center justify-between">
+                    <div className="absolute left-0 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl shadow-2xl z-50 py-1.5 text-xs">
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                         <span>Empresas ({empresas.length})</span>
                       </div>
-                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/60">
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
                         {empresas.map(emp => (
                           <button
                             key={emp.id}
@@ -801,22 +901,22 @@ export default function App() {
                               setEmpresaAtivaId(emp.id);
                               setMenuEmpresasAberto(false);
                             }}
-                            className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
-                              emp.id === empresaAtivaId ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-200'
+                            className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                              emp.id === empresaAtivaId ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400 font-bold' : 'text-slate-800 dark:text-slate-200'
                             }`}
                           >
                             <div className="truncate pr-2">
                               <div className="truncate font-semibold">{emp.nomeFantasia || emp.razaoSocial}</div>
-                              <div className="text-[10px] text-slate-400 font-mono">{emp.cnpj}</div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{emp.cnpj}</div>
                             </div>
                             {emp.status === 'inativa' && (
-                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded shrink-0">Inativa</span>
+                              <span className="text-[10px] bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded shrink-0">Inativa</span>
                             )}
                           </button>
                         ))}
                       </div>
 
-                      <div className="border-t border-slate-800 mt-1 pt-1 space-y-0.5">
+                      <div className="border-t border-slate-100 dark:border-slate-800 mt-1 pt-1 space-y-0.5">
                         <button
                           onClick={() => {
                             setMenuEmpresasAberto(false);
@@ -825,7 +925,7 @@ export default function App() {
                             setEmpresaParaEditar(null);
                             setModalEmpresasAberto(true);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                          className="w-full text-left px-3 py-1.5 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold flex items-center gap-2"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           + Nova empresa
@@ -837,9 +937,9 @@ export default function App() {
                             setModoEmpresasInicial('LISTA');
                             setModalEmpresasAberto(true);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                          className="w-full text-left px-3 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
                         >
-                          <Settings className="w-3.5 h-3.5 text-slate-400" />
+                          <Settings className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                           Gerenciar empresas
                         </button>
                       </div>
@@ -855,8 +955,10 @@ export default function App() {
                     onClick={() => {
                       setMenuCompetenciasAberto(!menuCompetenciasAberto);
                       setMenuEmpresasAberto(false);
+                      setMenuTemaAberto(false);
+                      setMenuPerfilAberto(false);
                     }}
-                    className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors"
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-100 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/60 transition-colors whitespace-nowrap"
                     title="Competência Ativa (Clique para trocar, criar ou gerenciar)"
                   >
                     <CalendarDays className="w-4 h-4 text-blue-400 shrink-0" />
@@ -865,13 +967,13 @@ export default function App() {
                   </button>
 
                   {menuCompetenciasAberto && (
-                    <div className="absolute left-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-1.5 text-xs">
-                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                    <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl shadow-2xl z-50 py-1.5 text-xs">
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                         Competências
                       </div>
-                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/60">
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
                         {listaCompetencias.length === 0 ? (
-                          <div className="px-3 py-2 text-slate-400 text-[11px]">Nenhuma competência cadastrada.</div>
+                          <div className="px-3 py-2 text-slate-500 dark:text-slate-400 text-[11px]">Nenhuma competência cadastrada.</div>
                         ) : (
                           listaCompetencias.map(comp => (
                             <button
@@ -880,19 +982,19 @@ export default function App() {
                                 setCompetenciaAtiva(comp.competencia);
                                 setMenuCompetenciasAberto(false);
                               }}
-                              className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
-                                comp.competencia === competenciaAtiva ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-200'
+                              className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                                comp.competencia === competenciaAtiva ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400 font-bold' : 'text-slate-800 dark:text-slate-200'
                               }`}
                             >
                               <div className="font-mono">{comp.competencia}</div>
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
                                 comp.status === 'FECHADA'
-                                  ? 'bg-rose-500/20 text-rose-300'
+                                  ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300'
                                   : comp.status === 'APROVADA'
-                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
                                   : comp.status === 'EM_CONFERENCIA'
-                                  ? 'bg-amber-500/20 text-amber-300'
-                                  : 'bg-blue-500/20 text-blue-300'
+                                  ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300'
+                                  : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'
                               }`}>
                                 {comp.status.replace('_', ' ')}
                               </span>
@@ -901,14 +1003,14 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="border-t border-slate-800 mt-1 pt-1 space-y-0.5">
+                      <div className="border-t border-slate-100 dark:border-slate-800 mt-1 pt-1 space-y-0.5">
                         <button
                           onClick={() => {
                             setMenuCompetenciasAberto(false);
                             setModoCompetenciaInicial('NOVA');
                             setModalCompetenciasAberto(true);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                          className="w-full text-left px-3 py-1.5 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold flex items-center gap-2"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           + Nova competência
@@ -919,9 +1021,9 @@ export default function App() {
                             setModoCompetenciaInicial('LISTA');
                             setModalCompetenciasAberto(true);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                          className="w-full text-left px-3 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
                         >
-                          <Settings className="w-3.5 h-3.5 text-slate-400" />
+                          <Settings className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                           Gerenciar competências
                         </button>
                         <button
@@ -930,7 +1032,7 @@ export default function App() {
                             setModoGerarFolhaInicial('LOTE');
                             setModalGerarFolhaAberto(true);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-indigo-400 hover:bg-slate-800 font-bold flex items-center gap-2"
+                          className="w-full text-left px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold flex items-center gap-2"
                         >
                           <Layers className="w-3.5 h-3.5" />
                           Gerar folha (Individual / Lote)
@@ -1052,6 +1154,28 @@ export default function App() {
                     </span>
                     {theme === 'system' && <Check className="w-3.5 h-3.5 text-blue-600" />}
                   </button>
+
+                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                  <button
+                    onClick={toggleEfeitos3D}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Ativar ou desativar profundidade 3D e cena interativa"
+                  >
+                    <span className="flex items-center gap-2 font-semibold">
+                      <Box className="w-4 h-4 text-indigo-500" />
+                      Efeitos 3D
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        efeitos3D
+                          ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      {efeitos3D ? 'Ativo' : 'Off'}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1078,7 +1202,7 @@ export default function App() {
                 <div className="hidden sm:flex flex-col items-start leading-tight text-left">
                   <span className="font-bold text-[11px] text-white">{perfilAtivoConfig.label}</span>
                   <span className="text-[9px] text-slate-400 hidden xl:block">
-                    {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/8 módulos ·{' '}
+                    {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/{Object.keys(perfilAtivoConfig.modulos).length} módulos ·{' '}
                     {Object.values(perfilAtivoConfig.acoes).filter(Boolean).length}/6 ações
                   </span>
                 </div>
@@ -1086,13 +1210,13 @@ export default function App() {
               </button>
 
               {menuPerfilAberto && (
-                <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs text-slate-100">
-                  <div className="px-2.5 py-2 border-b border-slate-800 flex items-center justify-between">
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs text-slate-900 dark:text-slate-100">
+                  <div className="px-2.5 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Perfil de Acesso Ativo
                       </div>
-                      <div className="text-[11px] text-slate-300 font-medium truncate max-w-[200px]">
+                      <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium truncate max-w-[200px]">
                         Operador: {configAcesso.operadorNome}
                       </div>
                     </div>
@@ -1101,7 +1225,7 @@ export default function App() {
                         setMenuPerfilAberto(false);
                         setModalAjustarAcessoAberto(true);
                       }}
-                      className="px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                      className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-600/20 hover:bg-blue-100 dark:hover:bg-blue-600/30 text-blue-700 dark:text-blue-300 text-[10px] font-bold flex items-center gap-1 transition-colors"
                     >
                       <SlidersHorizontal className="w-3 h-3" />
                       Ajustar
@@ -1111,9 +1235,9 @@ export default function App() {
                   <div className="py-1.5 space-y-1">
                     {(
                       [
-                        { id: 'dp_operator' as const, icon: UserCog, cor: 'text-blue-400' },
-                        { id: 'admin' as const, icon: ShieldCheck, cor: 'text-emerald-400' },
-                        { id: 'gestor' as const, icon: Briefcase, cor: 'text-amber-400' },
+                        { id: 'dp_operator' as const, icon: UserCog, cor: 'text-blue-600 dark:text-blue-400' },
+                        { id: 'admin' as const, icon: ShieldCheck, cor: 'text-emerald-600 dark:text-emerald-400' },
+                        { id: 'gestor' as const, icon: Briefcase, cor: 'text-amber-600 dark:text-amber-400' },
                       ]
                     ).map(item => {
                       const cfg = configAcesso.perfis[item.id];
@@ -1129,14 +1253,14 @@ export default function App() {
                             setUsuarioRole(item.id);
                             setMenuPerfilAberto(false);
                             mostrarNotificacao(
-                              `Perfil alterado para ${cfg.label} (${modCount}/8 módulos e ${acaoCount}/6 ações habilitadas).`,
+                              `Perfil alterado para ${cfg.label} (${modCount}/${Object.keys(cfg.modulos).length} módulos e ${acaoCount}/6 ações habilitadas).`,
                               'info'
                             );
                           }}
                           className={`w-full text-left px-2.5 py-2 rounded-xl flex items-start justify-between gap-2 transition-colors ${
                             ativo
-                              ? 'bg-blue-600/20 border border-blue-500/40 text-white'
-                              : 'hover:bg-slate-800 border border-transparent text-slate-200'
+                              ? 'bg-blue-50 dark:bg-blue-600/20 border border-blue-200 dark:border-blue-500/40 text-blue-950 dark:text-white'
+                              : 'hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent text-slate-800 dark:text-slate-200'
                           }`}
                         >
                           <div className="flex items-start gap-2.5 min-w-0">
@@ -1144,45 +1268,45 @@ export default function App() {
                             <div className="min-w-0">
                               <div className="font-bold flex items-center gap-1.5">
                                 <span>{cfg.label}</span>
-                                <span className="text-[9px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                                <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                                   {modCount}M·{acaoCount}A
                                 </span>
                               </div>
-                              <div className="text-[10px] text-slate-400 leading-snug mt-0.5">
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
                                 {cfg.subtitulo}
                               </div>
                             </div>
                           </div>
-                          {ativo && <Check className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />}
+                          {ativo && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
                         </button>
                       );
                     })}
 
-                    <div className="border-t border-slate-800 my-1 pt-1">
+                    <div className="border-t border-slate-100 dark:border-slate-800 my-1 pt-1">
                       <button
                         onClick={() => {
                           setUsuarioRole('employee');
                           setMenuPerfilAberto(false);
                         }}
-                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-800 flex items-start justify-between gap-2 text-slate-200 transition-colors"
+                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-start justify-between gap-2 text-slate-800 dark:text-slate-200 transition-colors"
                       >
                         <div className="flex items-start gap-2.5 min-w-0">
-                          <User className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                          <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                           <div className="min-w-0">
                             <div className="font-bold">Portal Empregado</div>
-                            <div className="text-[10px] text-slate-400 truncate max-w-[210px]">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[210px]">
                               Visualizar como:{' '}
                               {(empregados.find(e => e.id === configAcesso.portalEmpregadoId) || empregados[0])
                                 ?.nomeCompleto || 'Colaborador padrão'}
                             </div>
                           </div>
                         </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-1" />
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0 mt-1" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-800 pt-1.5">
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
                     <button
                       onClick={() => {
                         setMenuPerfilAberto(false);
@@ -1202,7 +1326,7 @@ export default function App() {
       </header>
 
       {/* 2. ÁREA DE TRABALHO COM BARRA LATERAL RECOLHÍVEL (DESKTOP) E CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 flex w-full">
+      <div className="flex-1 flex w-full min-w-0">
         {/* Barra Lateral (Desktop md:flex) */}
         <aside
           className={`hidden md:flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-200 select-none shrink-0 ${
@@ -1280,27 +1404,40 @@ export default function App() {
         </aside>
 
         {/* CONTEÚDO PRINCIPAL DAS TELAS */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full pb-24 md:pb-8">
-          {/* Notificação Toast */}
-          {notificacao && (
-            <div className={`p-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${
-              notificacao.tipo === 'sucesso'
-                ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
-                : notificacao.tipo === 'erro'
-                ? 'bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-800'
-                : 'bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800'
-            }`}>
-              <div className="flex items-center gap-2">
-                {notificacao.tipo === 'sucesso' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                )}
-                <span>{notificacao.mensagem}</span>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-5 max-w-7xl mx-auto w-full pb-24 md:pb-8">
+          {/* Trilha contextual discreta do módulo ativo */}
+          {empresas.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-200/70 dark:border-slate-800/80">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate font-medium text-slate-600 dark:text-slate-300">
+                  {empresaAtiva?.nomeFantasia || empresaAtiva?.razaoSocial}
+                </span>
+                <span aria-hidden="true">/</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {abaNavegacao === 'DASHBOARD'
+                    ? 'Visão Geral & Prazos'
+                    : abaNavegacao === 'FOLHA'
+                    ? 'Folha de Pagamento'
+                    : abaNavegacao === 'DECIMO_TERCEIRO'
+                    ? '13º Salário'
+                    : abaNavegacao === 'EMPREGADOS'
+                    ? 'Empregados & Admissão'
+                    : abaNavegacao === 'FERIAS'
+                    ? 'Férias & Afastamentos'
+                    : abaNavegacao === 'RESCISAO'
+                    ? 'Rescisão & TRCT'
+                    : abaNavegacao === 'CONTRATOS'
+                    ? 'Contratos & Recibos'
+                    : abaNavegacao === 'MOVIMENTACOES'
+                    ? 'Movimentações & Ponto'
+                    : 'eSocial & Obrigações'}
+                </span>
               </div>
-              <button onClick={() => setNotificacao(null)} className="p-1 hover:opacity-70">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
+                <span>Competência {competenciaAtiva}</span>
+                <span aria-hidden="true">·</span>
+                <span>{empregados.filter(e => e.status !== 'desligado').length} ativos</span>
+              </div>
             </div>
           )}
 
@@ -1312,7 +1449,7 @@ export default function App() {
                 <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>
                   <strong>Perfil Ativo: {perfilAtivoConfig.label}</strong> — {perfilAtivoConfig.subtitulo} (
-                  {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/8 módulos e{' '}
+                  {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/{Object.keys(perfilAtivoConfig.modulos).length} módulos e{' '}
                   {Object.values(perfilAtivoConfig.acoes).filter(Boolean).length}/6 ações críticas liberadas).
                 </span>
               </div>
@@ -1381,8 +1518,21 @@ export default function App() {
             </div>
           )}
 
-          {/* Zero-State quando não há nenhuma empresa cadastrada */}
-          {empresas.length === 0 ? (
+          {/* Skeleton Loader durante troca de empresa ou carregamento inicial */}
+          {carregandoGeral && empresas.length > 0 ? (
+            <div className="space-y-5 animate-pulse" aria-busy="true" aria-label="Carregando dados da competência">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div className="lg:col-span-5 h-44 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80" />
+                <div className="lg:col-span-7 grid grid-cols-2 gap-3.5">
+                  <div className="h-20 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" />
+                  <div className="h-20 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" />
+                  <div className="h-20 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" />
+                  <div className="h-20 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" />
+                </div>
+              </div>
+              <div className="h-52 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" />
+            </div>
+          ) : empresas.length === 0 ? (
             <div className="max-w-2xl mx-auto py-12 px-4 text-center">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-12 shadow-xs">
                 <div className="w-16 h-16 bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1456,9 +1606,13 @@ export default function App() {
                 </div>
 
                 {temCalculo ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                  <div className={`grid grid-cols-1 lg:grid-cols-12 gap-4 ${efeitos3D ? 'scene-3d-perspective' : ''}`}>
                     {/* Cartão de Maior Destaque Visual (Spotlight): Líquido a Pagar */}
-                    <div className="lg:col-span-5 p-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md flex flex-col justify-between space-y-4">
+                    <Card3D
+                      enabled={efeitos3D}
+                      intensity="medium"
+                      className="lg:col-span-5 p-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md flex flex-col justify-between space-y-4"
+                    >
                       <div>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider text-blue-200 block">
@@ -1485,12 +1639,16 @@ export default function App() {
                           Ver folha analítica <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </div>
+                    </Card3D>
 
                     {/* Grade com os Demais 4 Indicadores Complementares Reais */}
                     <div className="lg:col-span-7 grid grid-cols-2 gap-3.5">
                       {/* Proventos */}
-                      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                      <Card3D
+                        enabled={efeitos3D}
+                        intensity="subtle"
+                        className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between"
+                      >
                         <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                           Total de Proventos
                         </span>
@@ -1500,10 +1658,14 @@ export default function App() {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 block">
                           Salários, adicionais e benefícios
                         </span>
-                      </div>
+                      </Card3D>
 
                       {/* Descontos */}
-                      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                      <Card3D
+                        enabled={efeitos3D}
+                        intensity="subtle"
+                        className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between"
+                      >
                         <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
                           Descontos do Empregado
                         </span>
@@ -1513,10 +1675,14 @@ export default function App() {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 block">
                           INSS, IRRF, VT e faltas
                         </span>
-                      </div>
+                      </Card3D>
 
                       {/* FGTS Empresa 8% */}
-                      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                      <Card3D
+                        enabled={efeitos3D}
+                        intensity="subtle"
+                        className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between"
+                      >
                         <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
                           FGTS da Empresa (8%)
                         </span>
@@ -1526,10 +1692,14 @@ export default function App() {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 block">
                           Guia FGTS Digital (Patronal)
                         </span>
-                      </div>
+                      </Card3D>
 
                       {/* Encargos Patronais Totais */}
-                      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                      <Card3D
+                        enabled={efeitos3D}
+                        intensity="subtle"
+                        className="p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between"
+                      >
                         <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
                           Encargos Patronais Totais
                         </span>
@@ -1539,7 +1709,7 @@ export default function App() {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 block">
                           INSS Empresa + RAT + FGTS
                         </span>
-                      </div>
+                      </Card3D>
                     </div>
                   </div>
                 ) : (
@@ -1560,7 +1730,7 @@ export default function App() {
                       <button
                         onClick={handleCalcularFolhaCompleta}
                         disabled={processandoFolha}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                        className={`inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 ${efeitos3D ? 'btn-3d' : ''}`}
                       >
                         <Calculator className="w-4 h-4" />
                         {processandoFolha ? 'Processando cálculo...' : `Calcular Folha de ${competenciaAtiva}`}
@@ -1581,6 +1751,14 @@ export default function App() {
                 )}
               </div>
 
+              {/* Gráficos Executivos da Competência: Palco 3D Interativo & Setores */}
+              <DashboardCharts
+                competencia={folhaData?.competencia}
+                folhas={folhaData?.folhas || []}
+                empregados={empregados}
+                efeitos3D={efeitos3D}
+              />
+
               {/* Seção 2: Fluxo da Competência em 4 Etapas Visíveis & Ação Principal */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 p-5 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1598,15 +1776,18 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Stepper Visual de 4 Etapas */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                {/* Stepper Visual de 4 Etapas com Profundidade 3D */}
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 ${efeitos3D ? 'scene-3d-perspective' : ''}`}>
                   {etapasFluxo.map((etapa, idx) => {
                     const isConcluida = idx < etapaAtualIndex;
                     const isAtual = idx === etapaAtualIndex;
 
                     return (
-                      <div
+                      <Card3D
                         key={etapa.status}
+                        enabled={efeitos3D}
+                        intensity="subtle"
+                        glare={isAtual || isConcluida}
                         className={`p-3.5 rounded-xl border transition-all ${
                           isAtual
                             ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/20'
@@ -1639,7 +1820,7 @@ export default function App() {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
                           {etapa.sub}
                         </span>
-                      </div>
+                      </Card3D>
                     );
                   })}
                 </div>
@@ -1861,200 +2042,334 @@ export default function App() {
           {/* ========================================================= */}
           {/* ABA: FOLHA DE PAGAMENTO ANALÍTICA & MEMÓRIA DE CÁLCULO */}
           {/* ========================================================= */}
-          {abaNavegacao === 'FOLHA' && (
+          {abaNavegacao === 'FOLHA' && (() => {
+            const folhasBase = folhaData?.folhas || [];
+            const folhasFiltradas = folhasBase.filter(f => {
+              if (!termoBuscaFolha.trim()) return true;
+              const q = termoBuscaFolha.toLowerCase();
+              return (
+                f.nomeEmpregado.toLowerCase().includes(q) ||
+                f.matricula.toLowerCase().includes(q) ||
+                f.cargo.toLowerCase().includes(q) ||
+                f.departamento.toLowerCase().includes(q)
+              );
+            });
+            const somaBase = folhasFiltradas.reduce((s, f) => s + f.salarioBase, 0);
+            const somaProventos = folhasFiltradas.reduce((s, f) => s + f.totalProventos, 0);
+            const somaDescontos = folhasFiltradas.reduce((s, f) => s + f.totalDescontos, 0);
+            const somaLiquido = folhasFiltradas.reduce((s, f) => s + f.valorLiquido, 0);
+            const somaFgts = folhasFiltradas.reduce((s, f) => s + f.encargosEmpresa.fgtsDevido, 0);
+
+            return (
             <div className="space-y-4">
-              {/* Header da Folha */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded">
-                      Competência {competenciaAtiva}
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Folha Analítica Mensal</span>
+              {/* Header da Folha com Hierarquia Limpa de Ações */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      <span className="font-mono font-bold text-blue-700 dark:text-blue-400">
+                        Competência {competenciaAtiva}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>Folha Analítica Mensal</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="tabular-nums">{folhasBase.length} colaborador(es)</span>
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-1">
+                      {empresaAtiva?.razaoSocial || EMPRESA_PADRAO.razaoSocial}
+                    </h2>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-1">
-                    {empresaAtiva?.razaoSocial || EMPRESA_PADRAO.razaoSocial}
-                  </h2>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        if (!verificarPermissao('calcularFolha', 'adicionar ou editar eventos da folha')) return;
+                        setEmpregadoPreSelecionadoEvento(null);
+                        setLancamentoParaEditar(null);
+                        setModalAddEventAberto(true);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors whitespace-nowrap"
+                      title="Adicionar evento à folha (Horas extras, faltas, adicionais) individual ou em lote"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar Evento
+                    </button>
+
+                    <button
+                      onClick={handleCalcularFolhaCompleta}
+                      disabled={processandoFolha || statusComp === 'FECHADA'}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      title="Recalcular todas as verbas e tributos da competência ativa"
+                    >
+                      <Calculator className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      {processandoFolha ? 'Recalculando...' : 'Recalcular'}
+                    </button>
+
+                    {/* Menu Agrupado: Relatórios, Lote e Ferramentas */}
+                    <div ref={folhaToolsRef} className="relative">
+                      <button
+                        onClick={() => setMenuRelatoriosFolhaAberto(v => !v)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 transition-colors whitespace-nowrap"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span>Relatórios &amp; Ferramentas</span>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+
+                      {menuRelatoriosFolhaAberto && (
+                        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-30 p-1.5 text-xs space-y-0.5">
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              handleAbrirListagemFolha();
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-800 dark:text-slate-200 font-medium"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <span>Gerar Listagem de Folha (PDF)</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              setModalRecibosLoteAberto(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-800 dark:text-slate-200 font-medium"
+                          >
+                            <Receipt className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span>Gerar Recibos A4 (Lote/Indiv.)</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              if (!verificarPermissao('calcularFolha', 'gerar folha por competência ou em lote')) return;
+                              setModoGerarFolhaInicial('LOTE');
+                              setModalGerarFolhaAberto(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-800 dark:text-slate-200 font-medium"
+                          >
+                            <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <span>Gerar Folha em Lote / Meses</span>
+                          </button>
+
+                          <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              setDrawerAuditoriaAberto(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-700 dark:text-slate-300"
+                          >
+                            <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <span>Auditoria Comparativa</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              setModalImportarAberto(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-700 dark:text-slate-300"
+                          >
+                            <UploadCloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span>Importar Planilha de Ponto</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuRelatoriosFolhaAberto(false);
+                              setModalGuiaCltAberto(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 text-slate-700 dark:text-slate-300"
+                          >
+                            <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            <span>Direitos &amp; Alíquotas CLT 2026</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => {
-                      if (!verificarPermissao('calcularFolha', 'adicionar ou editar eventos da folha')) return;
-                      setEmpregadoPreSelecionadoEvento(null);
-                      setLancamentoParaEditar(null);
-                      setModalAddEventAberto(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-                    title="Adicionar evento à folha (Horas extras, faltas, adicionais) individual ou em lote"
-                  >
-                    <Plus className="w-4 h-4" />
-                    + Adicionar evento
-                  </button>
-
-                  <button
-                    onClick={handleAbrirListagemFolha}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-                    title="Gerar Listagem de Folha de Pagamento em papel Carta Retrato (Modelo Oficial)"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    Gerar Listagem de Folha
-                  </button>
-
-                  <button
-                    onClick={() => setModalRecibosLoteAberto(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-                    title="Gerar Recibos de Pagamento individuais em A4 Retrato"
-                  >
-                    <Receipt className="w-4 h-4" />
-                    Gerar Recibos de Pagamento
-                  </button>
-
-                  <button
-                    onClick={() => setModalGuiaCltAberto(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold rounded-xl transition-colors"
-                    title="Consultar tabela completa de proventos, descontos e alíquotas exatas CLT 2026"
-                  >
-                    <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    Direitos &amp; % CLT
-                  </button>
-
-                  <button
-                    onClick={() => setDrawerAuditoriaAberto(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors"
-                    title="Comparar Folha Atual vs Mês Anterior"
-                  >
-                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                    Auditoria
-                  </button>
-
-                  <button
-                    onClick={() => setModalImportarAberto(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors"
-                    title="Importar variáveis de ponto ou comissões"
-                  >
-                    <UploadCloud className="w-4 h-4 text-emerald-600" />
-                    Importar
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (!verificarPermissao('calcularFolha', 'gerar folha por competência ou em lote')) return;
-                      setModoGerarFolhaInicial('LOTE');
-                      setModalGerarFolhaAberto(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-                    title="Gerar folha de pagamento por competência ou em lote para múltiplos meses"
-                  >
-                    <Layers className="w-4 h-4" />
-                    Gerar Folha (Competência / Lote)
-                  </button>
-
-                  <button
-                    onClick={handleCalcularFolhaCompleta}
-                    disabled={processandoFolha || statusComp === 'FECHADA'}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors disabled:opacity-50"
-                    title="Recalcular todas as verbas e tributos da competência ativa"
-                  >
-                    <Calculator className="w-4 h-4" />
-                    {processandoFolha ? 'Recalculando...' : 'Recalcular'}
-                  </button>
+                {/* Barra de Filtro Rápido na Folha */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={termoBuscaFolha}
+                      onChange={e => setTermoBuscaFolha(e.target.value)}
+                      placeholder="Filtrar na folha por nome, matrícula, cargo ou setor..."
+                      className="w-full text-xs pl-8 pr-8 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {termoBuscaFolha && (
+                      <button
+                        onClick={() => setTermoBuscaFolha('')}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        title="Limpar filtro"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>
+                      Exibindo <strong className="text-slate-800 dark:text-slate-200">{folhasFiltradas.length}</strong> de{' '}
+                      {folhasBase.length} colaboradores
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Tabela dos Empregados Calculados com Scroll Isolado */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 overflow-hidden">
-                <div className="overflow-x-auto w-full">
+              {/* Tabela dos Empregados Calculados com Cabeçalho Fixo, Avatares e Rodapé de Totais */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 overflow-hidden min-w-0">
+                <div className="overflow-x-auto max-h-[540px] w-full">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider text-[11px]">
                       <tr>
-                        <th className="py-3 px-4">Matrícula / Colaborador</th>
-                        <th className="py-3 px-4">Cargo / Depto</th>
-                        <th className="py-3 px-4 text-right">Salário Base</th>
-                        <th className="py-3 px-4 text-right">Proventos (+)</th>
-                        <th className="py-3 px-4 text-right">Descontos (-)</th>
-                        <th className="py-3 px-4 text-right">Líquido a Pagar</th>
-                        <th className="py-3 px-4 text-center">FGTS Mês (8%)</th>
-                        <th className="py-3 px-4 text-center">Ações</th>
+                        <th className="py-3 px-3">Colaborador</th>
+                        <th className="py-3 px-3">Cargo / Depto</th>
+                        <th className="py-3 px-2.5 text-right">Salário Base</th>
+                        <th className="py-3 px-2.5 text-right">Proventos (+)</th>
+                        <th className="py-3 px-2.5 text-right">Descontos (-)</th>
+                        <th className="py-3 px-2.5 text-right">Líquido a Pagar</th>
+                        <th className="py-3 px-2.5 text-right">FGTS Mês (8%)</th>
+                        <th className="py-3 px-3 text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {folhaData?.folhas.map(folha => {
-                        const empObj = empregados.find(e => e.id === folha.empregadoId);
+                      {folhasFiltradas.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                            {folhasBase.length === 0
+                              ? 'Folha ainda não calculada nesta competência. Clique em "Recalcular" ou "Gerar Folha em Lote".'
+                              : 'Nenhum colaborador encontrado com o filtro informado.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        folhasFiltradas.map(folha => {
+                          const empObj = empregados.find(e => e.id === folha.empregadoId);
 
-                        return (
-                          <tr key={folha.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
-                            <td className="py-3.5 px-4">
-                              <div className="font-bold text-slate-900 dark:text-slate-100">{folha.nomeEmpregado}</div>
-                              <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Mat: {folha.matricula}</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="text-slate-800 dark:text-slate-200">{folha.cargo}</div>
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">{folha.departamento}</span>
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-700 dark:text-slate-300 tabular-nums">
-                              {formatarMoeda(folha.salarioBase)}
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                              {formatarMoeda(folha.totalProventos)}
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400 tabular-nums">
-                              - {formatarMoeda(folha.totalDescontos)}
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm tabular-nums">
-                              {formatarMoeda(folha.valorLiquido)}
-                            </td>
-                            <td className="py-3.5 px-4 text-center font-mono text-slate-600 dark:text-slate-400 tabular-nums">
-                              {formatarMoeda(folha.encargosEmpresa.fgtsDevido)}
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    if (!verificarPermissao('calcularFolha', 'lançar eventos para colaboradores')) return;
-                                    setEmpregadoPreSelecionadoEvento(empObj || null);
-                                    setLancamentoParaEditar(null);
-                                    setModalAddEventAberto(true);
-                                  }}
-                                  className="px-2 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
-                                  title="Lançar evento (HE, Falta, Adicional) para este colaborador"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  Evento
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    const itemPrincipal = folha.itens.find(i => i.rubricaCodigo === '0101') || folha.itens.find(i => i.rubricaCodigo === '0901') || folha.itens[0];
-                                    setModalMemoriaItem({
-                                      item: itemPrincipal,
-                                      salario: folha.salarioBase,
-                                      nome: folha.nomeEmpregado,
-                                    });
-                                  }}
-                                  className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
-                                  title="Ver Memória de Cálculo Aritmética e Jurídica"
-                                >
-                                  <Calculator className="w-3 h-3" />
-                                  Memória
-                                </button>
-
-                                {empObj && (
-                                  <button
-                                    onClick={() => handleAbrirReciboIndividual(folha, empObj)}
-                                    className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
-                                    title="Visualizar e Baixar Recibo de Pagamento A4 Retrato"
+                          return (
+                            <tr key={folha.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[11px] shrink-0 ${obterCorAvatar(
+                                      folha.nomeEmpregado
+                                    )}`}
                                   >
-                                    <Receipt className="w-3 h-3" />
-                                    Recibo A4
+                                    {obterIniciais(folha.nomeEmpregado)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[170px]">
+                                      {folha.nomeEmpregado}
+                                    </div>
+                                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                                      Mat. {folha.matricula}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <div className="text-slate-800 dark:text-slate-200 font-medium leading-snug max-w-[160px] truncate" title={folha.cargo}>
+                                  {folha.cargo}
+                                </div>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate max-w-[160px]">
+                                  {folha.departamento}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-2.5 text-right font-mono font-medium text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                                {formatarMoeda(folha.salarioBase)}
+                              </td>
+                              <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">
+                                {formatarMoeda(folha.totalProventos)}
+                              </td>
+                              <td className="py-2.5 px-2.5 text-right font-mono font-bold text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap">
+                                - {formatarMoeda(folha.totalDescontos)}
+                              </td>
+                              <td className="py-2.5 px-2.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm tabular-nums whitespace-nowrap">
+                                {formatarMoeda(folha.valorLiquido)}
+                              </td>
+                              <td className="py-2.5 px-2.5 text-right font-mono text-slate-600 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                                {formatarMoeda(folha.encargosEmpresa.fgtsDevido)}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => {
+                                      if (!verificarPermissao('calcularFolha', 'lançar eventos para colaboradores')) return;
+                                      setEmpregadoPreSelecionadoEvento(empObj || null);
+                                      setLancamentoParaEditar(null);
+                                      setModalAddEventAberto(true);
+                                    }}
+                                    className="px-2 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
+                                    title="Lançar evento (HE, Falta, Adicional) para este colaborador"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    Evento
                                   </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+
+                                  <button
+                                    onClick={() => {
+                                      const itemPrincipal = folha.itens.find(i => i.rubricaCodigo === '0101') || folha.itens.find(i => i.rubricaCodigo === '0901') || folha.itens[0];
+                                      setModalMemoriaItem({
+                                        item: itemPrincipal,
+                                        salario: folha.salarioBase,
+                                        nome: folha.nomeEmpregado,
+                                      });
+                                    }}
+                                    className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
+                                    title="Ver Memória de Cálculo Aritmética e Jurídica"
+                                  >
+                                    <Calculator className="w-3 h-3" />
+                                    Memória
+                                  </button>
+
+                                  {empObj && (
+                                    <button
+                                      onClick={() => handleAbrirReciboIndividual(folha, empObj)}
+                                      className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
+                                      title="Visualizar e Baixar Recibo de Pagamento A4 Retrato"
+                                    >
+                                      <Receipt className="w-3 h-3" />
+                                      Recibo A4
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
+                    {folhasFiltradas.length > 0 && (
+                      <tfoot className="bg-slate-50 dark:bg-slate-800/90 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100">
+                        <tr>
+                          <td colSpan={2} className="py-3 px-3 text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                            Totais ({folhasFiltradas.length} colaborador{folhasFiltradas.length > 1 ? 'es' : ''})
+                          </td>
+                          <td className="py-3 px-2.5 text-right font-mono tabular-nums whitespace-nowrap">
+                            {formatarMoeda(somaBase)}
+                          </td>
+                          <td className="py-3 px-2.5 text-right font-mono text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">
+                            {formatarMoeda(somaProventos)}
+                          </td>
+                          <td className="py-3 px-2.5 text-right font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap">
+                            - {formatarMoeda(somaDescontos)}
+                          </td>
+                          <td className="py-3 px-2.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm tabular-nums whitespace-nowrap">
+                            {formatarMoeda(somaLiquido)}
+                          </td>
+                          <td className="py-3 px-2.5 text-right font-mono text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                            {formatarMoeda(somaFgts)}
+                          </td>
+                          <td className="py-3 px-3" />
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
@@ -2301,6 +2616,38 @@ export default function App() {
                 </div>
               </div>
             </div>
+            );
+          })()}
+
+          {/* ========================================================= */}
+          {/* ABA: 13º SALÁRIO (ADIANTAMENTO 50% E PARCELA FINAL) */}
+          {/* ========================================================= */}
+          {abaNavegacao === 'DECIMO_TERCEIRO' && (
+            <DecimoTerceiroView
+              empresaAtiva={empresaAtiva || EMPRESA_PADRAO}
+              empregados={empregados}
+              competenciaAtiva={competenciaAtiva}
+              efeitos3D={efeitos3D}
+              verificarPermissao={verificarPermissao}
+              mostrarNotificacao={mostrarNotificacao}
+              onAbrirMemoria={(item, nomeEmpregado) =>
+                setModalMemoriaItem({
+                  item,
+                  nome: nomeEmpregado,
+                  salario: empregados.find(e => e.nomeCompleto === nomeEmpregado)?.salarioBase || item.memoriaCalculo.baseCalculo || 0,
+                })
+              }
+              onAbrirPdfPreview={req =>
+                setPdfPreviewData({
+                  isOpen: true,
+                  titulo: req.titulo,
+                  subtitulo: req.subtitulo,
+                  pdfUrl: req.pdfUrl,
+                  nomeArquivoDownload: req.nomeArquivoDownload,
+                  onBaixarArquivo: req.onBaixarArquivo,
+                })
+              }
+            />
           )}
 
           {/* ========================================================= */}
@@ -2335,7 +2682,7 @@ export default function App() {
                       if (!verificarPermissao('gerenciarEmpregados', 'admitir novos colaboradores')) return;
                       setModalNovaAdmissaoAberto(true);
                     }}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors whitespace-nowrap"
+                    className={`flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors whitespace-nowrap ${efeitos3D ? 'btn-3d' : ''}`}
                   >
                     <Plus className="w-4 h-4" />
                     Nova Admissão
@@ -2362,31 +2709,58 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${efeitos3D ? 'scene-3d-perspective' : ''}`}>
                   {empregadosFiltrados.map(emp => (
-                    <div
+                    <Card3D
                       key={emp.id}
+                      enabled={efeitos3D}
+                      intensity="subtle"
                       className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">Mat: {emp.matricula}</span>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
-                            emp.status === 'ativo'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${obterCorAvatar(
+                                emp.nomeCompleto
+                              )}`}
+                            >
+                              {obterIniciais(emp.nomeCompleto)}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight truncate">
+                                {emp.nomeCompleto}
+                              </h3>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {emp.cargo} · {emp.departamento}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                              emp.status === 'ativo'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                                : emp.status === 'ferias'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                                : emp.status === 'em_admissao'
+                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
+                                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
+                            }`}
+                          >
+                            {emp.status === 'ativo'
+                              ? 'Ativo'
                               : emp.status === 'ferias'
-                              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                              ? 'Em férias'
                               : emp.status === 'em_admissao'
-                              ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
-                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
-                          }`}>
-                            {emp.status.replace('_', ' ').toUpperCase()}
+                              ? 'Em admissão'
+                              : 'Desligado'}
                           </span>
                         </div>
 
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{emp.nomeCompleto}</h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">{emp.cargo} · {emp.departamento}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">CPF: {formatarCPF(emp.cpf)} · CBO {emp.cbo}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                          Mat. {emp.matricula} · CPF {formatarCPF(emp.cpf)} · CBO {emp.cbo}
+                        </p>
                       </div>
 
                       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -2487,7 +2861,7 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </Card3D>
                   ))}
                 </div>
               )}
@@ -2560,18 +2934,20 @@ export default function App() {
                     return (
                       <div key={pf.id} className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 px-2 rounded-xl transition-colors">
                         <div className="space-y-1.5 max-w-xl">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[11px] shrink-0 ${obterCorAvatar(
+                                emp.nomeCompleto
+                              )}`}
+                            >
+                              {obterIniciais(emp.nomeCompleto)}
+                            </div>
                             <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{emp.nomeCompleto}</span>
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                              Matrícula: {emp.matricula}
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                              Mat. {emp.matricula}
                             </span>
-                            {emp.id === 'emp-edenir' && (
-                              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded">
-                                Modelo Anexo (Demonstrativo e Recibo)
-                              </span>
-                            )}
                             {prog && (
-                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
                                 Férias Programadas
                               </span>
                             )}
@@ -2649,16 +3025,18 @@ export default function App() {
                     .map(emp => (
                       <div key={emp.id} className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 px-2 rounded-xl transition-colors">
                         <div className="space-y-1 max-w-xl">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[11px] shrink-0 ${obterCorAvatar(
+                                emp.nomeCompleto
+                              )}`}
+                            >
+                              {obterIniciais(emp.nomeCompleto)}
+                            </div>
                             <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{emp.nomeCompleto}</span>
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                              Matrícula: {emp.matricula}
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                              Mat. {emp.matricula}
                             </span>
-                            {emp.id === 'emp-edenir' && (
-                              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded">
-                                Modelo Anexo (Demonstrativo e Recibo)
-                              </span>
-                            )}
                           </div>
                           <div className="text-slate-600 dark:text-slate-400 text-xs flex flex-wrap items-center gap-x-4 gap-y-1">
                             <span>{emp.cargo}</span>
@@ -2761,21 +3139,25 @@ export default function App() {
                   ) : (
                     empregados.filter(e => e.status !== 'desligado').map(emp => (
                       <div key={emp.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                              Matrícula: {emp.matricula}
-                            </span>
-                            {emp.id === 'emp-edenir' && (
-                              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded">
-                                Modelo Anexo (Suzy Kids)
-                              </span>
-                            )}
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${obterCorAvatar(
+                              emp.nomeCompleto
+                            )}`}
+                          >
+                            {obterIniciais(emp.nomeCompleto)}
                           </div>
-                          <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
-                            {emp.cargo} · Admissão: {formatarData(emp.dataAdmissao)} · Salário Contratual: {formatarMoeda(emp.salarioBase)}
-                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
+                              <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                                Mat. {emp.matricula}
+                              </span>
+                            </div>
+                            <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
+                              {emp.cargo} · Admissão: {formatarData(emp.dataAdmissao)} · Salário Contratual: {formatarMoeda(emp.salarioBase)}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                           <button
@@ -2836,20 +3218,29 @@ export default function App() {
                             key={emp.id}
                             className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors"
                           >
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
-                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                                  Matrícula: {emp.matricula}
-                                </span>
-                                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded">
-                                  Desligado
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${obterCorAvatar(
+                                  emp.nomeCompleto
+                                )}`}
+                              >
+                                {obterIniciais(emp.nomeCompleto)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 dark:text-slate-100">{emp.nomeCompleto}</span>
+                                  <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                                    Mat. {emp.matricula}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded">
+                                    Desligado
+                                  </span>
+                                </div>
+                                <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
+                                  {emp.cargo} · Desligamento: {formatarData(resc?.dataDesligamento || emp.dataDesligamento)}
+                                  {resc ? ` · Líquido TRCT: ${formatarMoeda(resc.liquidoRescisao)}` : ''}
                                 </span>
                               </div>
-                              <span className="text-slate-500 dark:text-slate-400 block mt-0.5">
-                                {emp.cargo} · Desligamento: {formatarData(resc?.dataDesligamento || emp.dataDesligamento)}
-                                {resc ? ` · Líquido TRCT: ${formatarMoeda(resc.liquidoRescisao)}` : ''}
-                              </span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
@@ -3206,14 +3597,14 @@ export default function App() {
           </button>
         )}
 
-        <button
-          onClick={() => setMobileDrawerAberto(true)}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
-            ['FERIAS', 'RESCISAO', 'CONTRATOS', 'MOVIMENTACOES', 'ESOCIAL'].includes(abaNavegacao)
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
+          <button
+            onClick={() => setMobileDrawerAberto(true)}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
+              ['DECIMO_TERCEIRO', 'FERIAS', 'RESCISAO', 'CONTRATOS', 'MOVIMENTACOES', 'ESOCIAL'].includes(abaNavegacao)
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
           <Menu className="w-5 h-5 mb-0.5" />
           <span>Mais</span>
         </button>
@@ -3241,6 +3632,20 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
+              {perfilAtivoConfig.modulos.DECIMO_TERCEIRO && (
+                <button
+                  onClick={() => { setAbaNavegacao('DECIMO_TERCEIRO'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
+                    abaNavegacao === 'DECIMO_TERCEIRO'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <Gift className="w-4 h-4 shrink-0" />
+                  13º Salário
+                </button>
+              )}
+
               {perfilAtivoConfig.modulos.FERIAS && (
                 <button
                   onClick={() => { setAbaNavegacao('FERIAS'); setMobileDrawerAberto(false); }}

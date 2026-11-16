@@ -38,6 +38,53 @@
   }
 }
 
+/* Efeitos 3D sutis e táteis com suporte a prefers-reduced-motion */
+@layer utilities {
+  .scene-3d-perspective {
+    perspective: 1000px;
+  }
+
+  .card-3d-surface {
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, border-color 220ms ease;
+  }
+
+  .card-3d-surface:hover {
+    box-shadow: 0 18px 36px -14px rgba(15, 23, 42, 0.16), 0 6px 14px -6px rgba(37, 99, 235, 0.12);
+  }
+
+  .dark .card-3d-surface:hover {
+    box-shadow: 0 20px 40px -14px rgba(0, 0, 0, 0.55), 0 6px 16px -6px rgba(59, 130, 246, 0.18);
+  }
+
+  .btn-3d {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 3px 0 0 rgba(15, 23, 42, 0.16), 0 6px 14px -4px rgba(37, 99, 235, 0.25);
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 140ms ease, background-color 150ms ease;
+  }
+
+  .btn-3d:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 0 0 rgba(15, 23, 42, 0.18), 0 10px 18px -4px rgba(37, 99, 235, 0.32);
+  }
+
+  .btn-3d:active:not(:disabled) {
+    transform: translateY(1.5px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 1px 0 0 rgba(15, 23, 42, 0.16), 0 2px 6px -2px rgba(37, 99, 235, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-3d-surface,
+  .card-3d-surface:hover,
+  .btn-3d,
+  .btn-3d:hover,
+  .btn-3d:active {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
 @media print {
   body {
     background: white !important;

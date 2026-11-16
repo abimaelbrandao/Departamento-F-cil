@@ -3,6 +3,7 @@ export type UserRole = 'admin' | 'dp_operator' | 'gestor' | 'employee';
 export type ModuloSistemaId =
   | 'DASHBOARD'
   | 'FOLHA'
+  | 'DECIMO_TERCEIRO'
   | 'EMPREGADOS'
   | 'FERIAS'
   | 'RESCISAO'
@@ -342,6 +343,8 @@ export interface FolhaEmpregado {
   dataPagamento?: string;
   dataAssinatura?: string;
   comprovantePagamento?: string;
+  avos13?: number;
+  percentual13?: number;
 }
 
 export type StatusCompetencia = 'ABERTA' | 'EM_CONFERENCIA' | 'APROVADA' | 'FECHADA';

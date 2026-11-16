@@ -349,6 +349,36 @@ export function calcularValorRubricaEvento(params: {
   return Math.round((valorManual > 0 ? valorManual : ref) * 100) / 100;
 }
 
+export interface OpcoesCalculo13 {
+  avos?: number;
+  percentualAdiantamento?: number;
+  adiantamentoPagoOverride?: number;
+  valorMediasVariaveis?: number;
+}
+
+/**
+ * Calcula a quantidade de avos (0 a 12) de 13º Salário no ano conforme Art. 1º, § 2º da Lei nº 4.090/1962
+ * (Fração igual ou superior a 15 dias no mês trabalhado equivale a 1/12 avo integral).
+ */
+export function calcularAvos13NoAno(dataAdmissao: string, anoReferencia: number): number {
+  if (!dataAdmissao) return 12;
+  const partes = dataAdmissao.split('T')[0].split('-');
+  if (partes.length !== 3) return 12;
+  const admAno = Number(partes[0]);
+  const admMes = Number(partes[1]);
+  const admDia = Number(partes[2]);
+  if (!admAno || !admMes || !admDia) return 12;
+
+  if (admAno < anoReferencia) return 12;
+  if (admAno > anoReferencia) return 0;
+
+  const mesesRestantes = Math.max(0, 12 - admMes + 1);
+  const diasNoMesAdmissao = new Date(admAno, admMes, 0).getDate();
+  const diasTrabalhadosNoMes = Math.max(0, diasNoMesAdmissao - admDia + 1);
+  const avos = diasTrabalhadosNoMes >= 15 ? mesesRestantes : Math.max(0, mesesRestantes - 1);
+  return Math.max(0, Math.min(12, avos));
+}
+
 /**
  * Calcula a folha de pagamento completa de um empregado (Mensal, Adiantamento, 13º 1ª/2ª/Integral)
  * com memória de cálculo determinística e aplicação exata de proventos e descontos da CLT.
@@ -358,7 +388,8 @@ export function processarFolhaEmpregado(
   empresa: Empresa,
   competencia: string,
   lancamentos: LancamentoVariavel[] = [],
-  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | '13_INTEGRAL' | 'COMPLEMENTAR' = 'MENSAL'
+  tipoFolha: 'MENSAL' | 'ADIANTAMENTO' | '13_PRIMEIRA_PARCELA' | '13_SEGUNDA_PARCELA' | '13_INTEGRAL' | 'COMPLEMENTAR' = 'MENSAL',
+  opcoes13?: OpcoesCalculo13
 ): FolhaEmpregado {
   const itens: ItemCalculadoFolha[] = [];
   const divisor = empregado.divisorHoras || 220;
@@ -423,44 +454,56 @@ export function processarFolhaEmpregado(
   // MODO 2: 13º SALÁRIO (1ª PARCELA 50% / 2ª PARCELA / INTEGRAL)
   // --------------------------------------------------------------------------
   if (tipoFolha === '13_PRIMEIRA_PARCELA' || tipoFolha === '13_SEGUNDA_PARCELA' || tipoFolha === '13_INTEGRAL') {
-    const adicionalPeric = empregado.adicionalPericulosidade ? Math.round(salarioBase * 0.30 * 100) / 100 : 0;
-    const adicionalInsalub =
-      empregado.adicionalInsalubridade === 'MINIMO_10'
-        ? Math.round(SALARIO_MINIMO_NACIONAL * 0.10 * 100) / 100
-        : empregado.adicionalInsalubridade === 'MEDIO_20'
-        ? Math.round(SALARIO_MINIMO_NACIONAL * 0.20 * 100) / 100
-        : empregado.adicionalInsalubridade === 'MAXIMO_40'
-        ? Math.round(SALARIO_MINIMO_NACIONAL * 0.40 * 100) / 100
-        : 0;
-    const remuneracaoBase13 = salarioBase + adicionalPeric + adicionalInsalub;
+    const anoReferencia = Number(String(competencia).split('/').pop()) || new Date().getFullYear();
+    const avos = ehEstagio
+      ? 0
+      : Math.max(0, Math.min(12, opcoes13?.avos ?? calcularAvos13NoAno(empregado.dataAdmissao, anoReferencia)));
+    const mediasVariaveis = Math.max(0, Number(opcoes13?.valorMediasVariaveis || 0));
+
+    const adicionalPeric = empregado.adicionalPericulosidade && !ehEstagio ? Math.round(salarioBase * 0.30 * 100) / 100 : 0;
+    const adicionalInsalub = ehEstagio
+      ? 0
+      : empregado.adicionalInsalubridade === 'MINIMO_10'
+      ? Math.round(SALARIO_MINIMO_NACIONAL * 0.10 * 100) / 100
+      : empregado.adicionalInsalubridade === 'MEDIO_20'
+      ? Math.round(SALARIO_MINIMO_NACIONAL * 0.20 * 100) / 100
+      : empregado.adicionalInsalubridade === 'MAXIMO_40'
+      ? Math.round(SALARIO_MINIMO_NACIONAL * 0.40 * 100) / 100
+      : 0;
+    const remuneracaoBase13 = arredondarMoeda(salarioBase + adicionalPeric + adicionalInsalub + mediasVariaveis);
+    const valor13Proporcional = arredondarMoeda((remuneracaoBase13 * avos) / 12);
 
     if (tipoFolha === '13_PRIMEIRA_PARCELA') {
-      const valorParcela1 = Math.round(remuneracaoBase13 * 0.50 * 100) / 100;
+      const percentual = Math.max(1, Math.min(100, Number(opcoes13?.percentualAdiantamento ?? 50)));
+      const valorParcela1 = arredondarMoeda(valor13Proporcional * (percentual / 100));
+
       itens.push({
-        rubricaCodigo: '0131',
-        descricao: '13º Salário — 1ª Parcela (Adiantamento 50%)',
+        rubricaCodigo: '150',
+        descricao: 'Adiantamento de 13º Salário',
         tipo: 'PROVENTO',
-        referencia: '50%',
+        referencia: `${avos} Avos(${percentual}%)`,
         provento: valorParcela1,
         desconto: 0,
         memoriaCalculo: {
-          titulo: '1ª Parcela do 13º Salário (Lei 4.749/1965)',
-          formula: 'Remuneração Integral ÷ 2 (50%) — Sem desconto de INSS/IRRF',
+          titulo: `1ª Parcela do 13º Salário — Adiantamento ${percentual}% (Lei 4.749/1965)`,
+          formula: `((Remuneração Base × ${avos}/12 avos) × ${percentual}%) — Sem desconto de INSS/IRRF`,
           passoAPasso: [
-            `Remuneração base do 13º: R$ ${remuneracaoBase13.toFixed(2)}`,
-            `Percentual legal da 1ª parcela (até 30/nov): 50%`,
-            `Cálculo: R$ ${remuneracaoBase13.toFixed(2)} × 50% = R$ ${valorParcela1.toFixed(2)}`,
-            `FGTS (8% ou 2% Aprendiz) incide sobre a 1ª parcela no mês do pagamento.`
+            `Salário Base: R$ ${salarioBase.toFixed(2)}${adicionalPeric + adicionalInsalub > 0 ? ` + Adicionais fixos: R$ ${(adicionalPeric + adicionalInsalub).toFixed(2)}` : ''}${mediasVariaveis > 0 ? ` + Médias variáveis: R$ ${mediasVariaveis.toFixed(2)}` : ''}`,
+            `Avos proporcionais no ano (${anoReferencia}): ${avos}/12 avos (Art. 1º § 2º Lei 4.090/62 — >= 15 dias trabalhados no mês)`,
+            `13º Proporcional integral (${avos}/12): R$ ${valor13Proporcional.toFixed(2)}`,
+            `Percentual da 1ª parcela (prazo legal até 30/nov): ${percentual}%`,
+            `Valor apurado da 1ª parcela: R$ ${valor13Proporcional.toFixed(2)} × ${percentual}% = R$ ${valorParcela1.toFixed(2)}`,
+            `Não incidem INSS nem IRRF nesta parcela; o FGTS (8% CLT ou 2% Aprendiz) incide na competência do pagamento.`
           ],
-          baseCalculo: remuneracaoBase13,
-          aliquotasOuFatores: { percentual: 50 },
+          baseCalculo: valor13Proporcional,
+          aliquotasOuFatores: { avos: `${avos}/12`, percentual: `${percentual}%`, remuneracaoBase13 },
           fundamentoLegal: 'Lei nº 4.090/1962 e Art. 2º da Lei nº 4.749/1965'
         }
       });
 
       const optanteFGTS13 = empregado.optanteFGTS !== false && !ehDiretor && !ehEstagio;
       const aliqFGTS13 = ehAprendiz ? 0.02 : (empregado.aliquotaFGTS || 0.08);
-      const fgts13 = optanteFGTS13 ? Math.round(valorParcela1 * aliqFGTS13 * 100) / 100 : 0;
+      const fgts13 = optanteFGTS13 ? arredondarMoeda(valorParcela1 * aliqFGTS13) : 0;
 
       return {
         id: `folha-${empregado.id}-${competencia}-13-1`,
@@ -480,59 +523,63 @@ export function processarFolhaEmpregado(
         encargosEmpresa: { fgtsDevido: fgts13, inssPatronal: 0, ratAjustado: 0, terceiros: 0, totalEncargos: fgts13 },
         statusPagamento: 'EMITIDO',
         dataEmissao: new Date().toISOString().split('T')[0],
+        avos13: avos,
+        percentual13: percentual,
       };
     }
 
     // 13ª Integral ou 2ª Parcela (Tributação exclusiva de INSS e IRRF sobre o total de 13º)
-    const valor13Integral = Math.round(remuneracaoBase13 * 100) / 100;
-    const adiantamento13Deduzir = tipoFolha === '13_SEGUNDA_PARCELA' ? Math.round(remuneracaoBase13 * 0.50 * 100) / 100 : 0;
+    const valor13Integral = valor13Proporcional;
+    const adiantamento13Deduzir = tipoFolha === '13_SEGUNDA_PARCELA'
+      ? arredondarMoeda(
+          opcoes13?.adiantamentoPagoOverride !== undefined
+            ? Math.max(0, opcoes13.adiantamentoPagoOverride)
+            : valor13Integral * 0.50
+        )
+      : 0;
 
     itens.push({
-      rubricaCodigo: '0132',
-      descricao: tipoFolha === '13_SEGUNDA_PARCELA' ? '13º Salário Integral (Base 2ª Parcela)' : '13º Salário Integral',
+      rubricaCodigo: '160',
+      descricao: '13º Salário',
       tipo: 'PROVENTO',
-      referencia: '12/12',
+      referencia: `${avos}/12`,
       provento: valor13Integral,
       desconto: 0,
       memoriaCalculo: {
-        titulo: '13º Salário Integral (Gratificação Natalina)',
-        formula: 'Remuneração Integral × 12/12 avos',
+        titulo: `13º Salário (${avos}/12 avos — Parcela Final / Quitação)`,
+        formula: `Remuneração Base × (${avos} ÷ 12 avos)`,
         passoAPasso: [
-          `Salário Base + Adicionais habituais: R$ ${valor13Integral.toFixed(2)}`,
-          `Tributação de INSS e IRRF ocorre integralmente em separado na 2ª parcela/quitação.`
+          `Salário Base: R$ ${salarioBase.toFixed(2)}${adicionalPeric + adicionalInsalub > 0 ? ` + Adicionais fixos: R$ ${(adicionalPeric + adicionalInsalub).toFixed(2)}` : ''}${mediasVariaveis > 0 ? ` + Médias variáveis: R$ ${mediasVariaveis.toFixed(2)}` : ''}`,
+          `Proporcionalidade adquirida em ${anoReferencia}: ${avos}/12 avos`,
+          `Valor bruto do 13º Salário: R$ ${remuneracaoBase13.toFixed(2)} × (${avos}/12) = R$ ${valor13Integral.toFixed(2)}`,
+          `Tributação de INSS e IRRF ocorre integralmente em separado sobre o total bruto do 13º Salário (prazo até 20/dez).`
         ],
-        baseCalculo: valor13Integral,
-        aliquotasOuFatores: { avos: '12/12' },
-        fundamentoLegal: 'Art. 1º da Lei nº 4.090/1962'
+        baseCalculo: remuneracaoBase13,
+        aliquotasOuFatores: { avos: `${avos}/12`, mediasVariaveis },
+        fundamentoLegal: 'Art. 1º da Lei nº 4.090/1962 e Decreto nº 10.854/2021'
       }
     });
 
-    if (adiantamento13Deduzir > 0) {
-      itens.push({
-        rubricaCodigo: '0231',
-        descricao: 'Desconto 1ª Parcela 13º Salário Paga',
-        tipo: 'DESCONTO',
-        referencia: '50%',
-        provento: 0,
-        desconto: adiantamento13Deduzir,
-        memoriaCalculo: {
-          titulo: 'Compensação da 1ª Parcela do 13º Salário',
-          formula: '50% já antecipado até 30 de novembro',
-          passoAPasso: [`Valor deduzido da 1ª parcela já quitada: R$ ${adiantamento13Deduzir.toFixed(2)}`],
-          baseCalculo: valor13Integral,
-          aliquotasOuFatores: { percentual: 50 },
-          fundamentoLegal: 'Decreto nº 10.854/2021, Art. 78'
+    const inss13 = !ehEstagio && !ehDiretor
+      ? calcularINSSProgressivo(valor13Integral)
+      : ehDiretor
+      ? {
+          valorTotal: Math.min(TETO_INSS_CONTRIBUINTE_INDIVIDUAL, arredondarMoeda(Math.min(valor13Integral, TETO_INSS) * ALIQUOTA_INSS_CONTRIBUINTE_INDIVIDUAL)),
+          aliquotaEfetiva: 11,
+          passos: ['Contribuinte individual (11% limitado ao teto previdenciário 2026)'],
+          faixasCalculadas: [],
         }
-      });
-    }
+      : { valorTotal: 0, aliquotaEfetiva: 0, passos: [], faixasCalculadas: [] };
 
-    const inss13 = !ehEstagio ? calcularINSSProgressivo(valor13Integral) : { valorTotal: 0, aliquotaEfetiva: 0, passos: [], faixasCalculadas: [] };
     if (inss13.valorTotal > 0) {
+      const refINSS = Number.isInteger(inss13.aliquotaEfetiva)
+        ? `${inss13.aliquotaEfetiva}%`
+        : `${inss13.aliquotaEfetiva.toFixed(2).replace('.', ',')}%`;
       itens.push({
-        rubricaCodigo: '0901',
-        descricao: 'INSS s/ 13º Salário (Tributação Exclusiva)',
+        rubricaCodigo: '310',
+        descricao: 'INSS',
         tipo: 'DESCONTO',
-        referencia: `${inss13.aliquotaEfetiva.toFixed(2)}%`,
+        referencia: refINSS,
         provento: 0,
         desconto: inss13.valorTotal,
         memoriaCalculo: {
@@ -540,8 +587,30 @@ export function processarFolhaEmpregado(
           formula: 'Tabela Progressiva 2026 aplicada exclusivamente sobre o 13º Integral',
           passoAPasso: inss13.passos,
           baseCalculo: valor13Integral,
-          aliquotasOuFatores: { aliquotaEfetiva: `${inss13.aliquotaEfetiva}%` },
+          aliquotasOuFatores: { aliquotaEfetiva: `${inss13.aliquotaEfetiva.toFixed(2)}%` },
           fundamentoLegal: 'Art. 7º § 2º Decreto nº 3.048/1999 e Portaria MPS/MF nº 13/2026'
+        }
+      });
+    }
+
+    if (adiantamento13Deduzir > 0) {
+      itens.push({
+        rubricaCodigo: '450',
+        descricao: 'Adiantam. 13º Sal. Compensação',
+        tipo: 'DESCONTO',
+        referencia: '',
+        provento: 0,
+        desconto: adiantamento13Deduzir,
+        memoriaCalculo: {
+          titulo: 'Compensação da 1ª Parcela do 13º Salário',
+          formula: 'Valor líquido já adiantado na 1ª parcela (até 30/nov)',
+          passoAPasso: [
+            `Valor compensado referente ao adiantamento da 1ª parcela: R$ ${adiantamento13Deduzir.toFixed(2)}`,
+            `O FGTS da 2ª parcela incidirá apenas sobre a diferença residual (R$ ${Math.max(0, valor13Integral - adiantamento13Deduzir).toFixed(2)}).`
+          ],
+          baseCalculo: valor13Integral,
+          aliquotasOuFatores: { adiantamentoCompensado: adiantamento13Deduzir },
+          fundamentoLegal: 'Decreto nº 10.854/2021, Art. 78 e Lei nº 4.749/1965'
         }
       });
     }
@@ -550,10 +619,10 @@ export function processarFolhaEmpregado(
     const irrf13 = !ehEstagio ? calcularIRRF(valor13Integral, inss13.valorTotal, depsIRRF) : { valorTotal: 0, baseCalculo: 0, aliquotaAplicada: 0, deducaoAplicada: 0, redutorLei15270: 0, metodoUtilizado: 'DEDUCOES_LEGAIS' as const, passos: [] };
     if (irrf13.valorTotal > 0) {
       itens.push({
-        rubricaCodigo: '0902',
-        descricao: 'IRRF s/ 13º Salário (Tributação Exclusiva)',
+        rubricaCodigo: '320',
+        descricao: 'IRRF s/ 13º Salário',
         tipo: 'DESCONTO',
-        referencia: `${irrf13.aliquotaAplicada.toFixed(1)}%`,
+        referencia: `${irrf13.aliquotaAplicada.toFixed(1).replace('.', ',')}%`,
         provento: 0,
         desconto: irrf13.valorTotal,
         memoriaCalculo: {
@@ -567,12 +636,12 @@ export function processarFolhaEmpregado(
       });
     }
 
-    const totalDesc13 = Math.round((adiantamento13Deduzir + inss13.valorTotal + irrf13.valorTotal) * 100) / 100;
-    const liq13 = Math.max(0, Math.round((valor13Integral - totalDesc13) * 100) / 100);
+    const totalDesc13 = arredondarMoeda(adiantamento13Deduzir + inss13.valorTotal + irrf13.valorTotal);
+    const liq13 = Math.max(0, arredondarMoeda(valor13Integral - totalDesc13));
     const optanteFGTS13 = empregado.optanteFGTS !== false && !ehDiretor && !ehEstagio;
     const aliqFGTS13 = ehAprendiz ? 0.02 : (empregado.aliquotaFGTS || 0.08);
-    const baseFGTSRestante = Math.max(0, valor13Integral - adiantamento13Deduzir);
-    const fgts13 = optanteFGTS13 ? Math.round(baseFGTSRestante * aliqFGTS13 * 100) / 100 : 0;
+    const baseFGTSRestante = Math.max(0, arredondarMoeda(valor13Integral - adiantamento13Deduzir));
+    const fgts13 = optanteFGTS13 ? arredondarMoeda(baseFGTSRestante * aliqFGTS13) : 0;
 
     return {
       id: `folha-${empregado.id}-${competencia}-13`,
@@ -588,10 +657,16 @@ export function processarFolhaEmpregado(
       totalProventos: valor13Integral,
       totalDescontos: totalDesc13,
       valorLiquido: liq13,
-      bases: { baseINSS: valor13Integral, baseIRRF: irrf13.baseCalculo, baseFGTS: optanteFGTS13 ? baseFGTSRestante : 0, baseSalarioFamilia: 0 },
+      bases: {
+        baseINSS: !ehEstagio ? valor13Integral : 0,
+        baseIRRF: irrf13.valorTotal > 0 ? irrf13.baseCalculo : 0,
+        baseFGTS: optanteFGTS13 ? baseFGTSRestante : 0,
+        baseSalarioFamilia: 0,
+      },
       encargosEmpresa: { fgtsDevido: fgts13, inssPatronal: 0, ratAjustado: 0, terceiros: 0, totalEncargos: fgts13 },
       statusPagamento: 'EMITIDO',
       dataEmissao: new Date().toISOString().split('T')[0],
+      avos13: avos,
     };
   }
 

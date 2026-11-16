@@ -35,6 +35,7 @@ export const CONFIGURACAO_ACESSO_PADRAO: ConfiguracaoAcessoSistema = {
       modulos: {
         DASHBOARD: true,
         FOLHA: true,
+        DECIMO_TERCEIRO: true,
         EMPREGADOS: true,
         FERIAS: true,
         RESCISAO: true,
@@ -58,6 +59,7 @@ export const CONFIGURACAO_ACESSO_PADRAO: ConfiguracaoAcessoSistema = {
       modulos: {
         DASHBOARD: true,
         FOLHA: true,
+        DECIMO_TERCEIRO: true,
         EMPREGADOS: true,
         FERIAS: true,
         RESCISAO: true,
@@ -81,6 +83,7 @@ export const CONFIGURACAO_ACESSO_PADRAO: ConfiguracaoAcessoSistema = {
       modulos: {
         DASHBOARD: true,
         FOLHA: false,
+        DECIMO_TERCEIRO: false,
         EMPREGADOS: true,
         FERIAS: true,
         RESCISAO: false,
@@ -163,6 +166,7 @@ export function salvarConfiguracaoAcesso(config: ConfiguracaoAcessoSistema) {
 const MODULOS_METADATA: Array<{ id: ModuloSistemaId; label: string; grupo: string }> = [
   { id: 'DASHBOARD', label: 'Visão Geral & Prazos', grupo: 'Rotinas Mensais' },
   { id: 'FOLHA', label: 'Folha de Pagamento', grupo: 'Rotinas Mensais' },
+  { id: 'DECIMO_TERCEIRO', label: '13º Salário (1ª/2ª Parc.)', grupo: 'Rotinas Mensais' },
   { id: 'FERIAS', label: 'Férias & Afastamentos', grupo: 'Rotinas Mensais' },
   { id: 'RESCISAO', label: 'Rescisão & TRCT', grupo: 'Rotinas Mensais' },
   { id: 'EMPREGADOS', label: 'Empregados & Admissão', grupo: 'Gestão de Pessoas' },
