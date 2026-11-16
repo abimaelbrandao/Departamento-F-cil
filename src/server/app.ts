@@ -668,20 +668,59 @@ app.use((req, res, next) => {
     }
   });
 
-  // Empregados: Edição cadastral
+  // Empregados: Edição cadastral completa (Ficha Cadastral)
   app.put('/api/empregados/:id', (req, res) => {
-    const idx = db.empregados.findIndex(e => e.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Empregado não encontrado' });
+    const { id } = req.params;
+    let idx = db.empregados.findIndex(e => e.id === id);
 
     if (req.body.cpf) {
-      const cpfLimpo = req.body.cpf.replace(/\D/g, '');
+      const cpfLimpo = String(req.body.cpf).replace(/\D/g, '');
       if (cpfLimpo.length === 11 && !validarCPF(cpfLimpo)) {
         return res.status(400).json({ error: 'CPF informado é inválido.' });
       }
       req.body.cpf = cpfLimpo;
+
+      const empresaTargetId = req.body.empresaId || (idx !== -1 ? db.empregados[idx].empresaId : '');
+      if (cpfLimpo && empresaTargetId) {
+        const duplicado = db.empregados.some(
+          e =>
+            e.id !== id &&
+            e.empresaId === empresaTargetId &&
+            (e.cpf || '').replace(/\D/g, '') === cpfLimpo &&
+            e.status !== 'desligado'
+        );
+        if (duplicado) {
+          return res.status(409).json({ error: 'Já existe um colaborador ativo com este CPF nesta empresa.' });
+        }
+      }
     }
 
-    db.empregados[idx] = { ...db.empregados[idx], ...req.body };
+    if (idx === -1) {
+      if (!req.body?.nomeCompleto) {
+        return res.status(404).json({ error: 'Empregado não encontrado' });
+      }
+      const novoRegistro: Empregado = {
+        ...(req.body as Empregado),
+        id,
+      };
+      db.empregados.push(novoRegistro);
+      salvarDB();
+      return res.json(novoRegistro);
+    }
+
+    const atual = db.empregados[idx];
+    const body = req.body || {};
+    db.empregados[idx] = {
+      ...atual,
+      ...body,
+      id: atual.id,
+      endereco: body.endereco
+        ? { ...(atual.endereco || ({} as any)), ...body.endereco }
+        : atual.endereco,
+      dadosBancarios: body.dadosBancarios
+        ? { ...(atual.dadosBancarios || ({} as any)), ...body.dadosBancarios }
+        : atual.dadosBancarios,
+    };
     salvarDB();
     res.json(db.empregados[idx]);
   });

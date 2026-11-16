@@ -3937,10 +3937,27 @@ export default function App() {
           onClose={() => setModalAdmissaoEmpregado(null)}
           empresa={empresaAtiva || EMPRESA_PADRAO}
           empregado={modalAdmissaoEmpregado}
-          onAtualizarEmpregado={empAtualizado => {
+          onAtualizarEmpregado={async empAtualizado => {
             setEmpregados(prev => prev.map(e => (e.id === empAtualizado.id ? empAtualizado : e)));
             setModalAdmissaoEmpregado(empAtualizado);
+            try {
+              await api.salvarEmpregado({
+                id: empAtualizado.id,
+                empresaId: empAtualizado.empresaId,
+                nomeCompleto: empAtualizado.nomeCompleto,
+                clausulasContratoCustom: empAtualizado.clausulasContratoCustom,
+              });
+            } catch (err) {
+              console.warn('Falha ao persistir cláusulas no backend:', err);
+            }
             mostrarNotificacao(`Cláusulas de ${empAtualizado.nomeCompleto} salvas com sucesso!`, 'sucesso');
+          }}
+          onEditarFichaCadastral={emp => {
+            if (!verificarPermissao('gerenciarEmpregados', 'editar dados cadastrais de colaboradores')) return;
+            setModalAdmissaoEmpregado(null);
+            setEmpregadoAcaoSelecionado(emp);
+            setModoEmployeeAction('EDICAO');
+            setModalEmployeeActionAberto(true);
           }}
         />
       )}

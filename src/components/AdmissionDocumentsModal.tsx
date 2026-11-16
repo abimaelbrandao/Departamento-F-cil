@@ -14,7 +14,8 @@ import {
   User,
   ShieldAlert,
   Save,
-  HelpCircle
+  HelpCircle,
+  Edit2
 } from 'lucide-react';
 import { Empresa, Empregado } from '../types/dp';
 import {
@@ -33,6 +34,7 @@ interface Props {
   empresa: Empresa;
   empregado: Empregado;
   onAtualizarEmpregado?: (empregadoAtualizado: Empregado) => void;
+  onEditarFichaCadastral?: (empregado: Empregado) => void;
 }
 
 export type TipoDocumentoAdmissao = 'CONTRATO' | 'REGISTRO' | 'CONJUNTO';
@@ -43,6 +45,7 @@ export const AdmissionDocumentsModal: React.FC<Props> = ({
   empresa,
   empregado,
   onAtualizarEmpregado,
+  onEditarFichaCadastral,
 }) => {
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoAdmissao>('CONJUNTO');
   const [modoEdicaoClausulas, setModoEdicaoClausulas] = useState(false);
@@ -165,13 +168,27 @@ export const AdmissionDocumentsModal: React.FC<Props> = ({
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors"
-              title="Fechar"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {onEditarFichaCadastral && (
+                <button
+                  type="button"
+                  onClick={() => onEditarFichaCadastral(empregado)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-colors"
+                  title="Alterar dados cadastrais, endereço, documentos, contrato e dependentes na Ficha Cadastral"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  Alterar Ficha Cadastral
+                </button>
+              )}
+
+              <button
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Subheader com Dados Chave da Admissão */}
