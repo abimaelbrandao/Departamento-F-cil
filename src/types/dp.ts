@@ -1,5 +1,38 @@
 export type UserRole = 'admin' | 'dp_operator' | 'gestor' | 'employee';
 
+export type ModuloSistemaId =
+  | 'DASHBOARD'
+  | 'FOLHA'
+  | 'EMPREGADOS'
+  | 'FERIAS'
+  | 'RESCISAO'
+  | 'CONTRATOS'
+  | 'MOVIMENTACOES'
+  | 'ESOCIAL';
+
+export interface AcoesPermissao {
+  gerenciarEmpresas: boolean;
+  gerenciarEmpregados: boolean;
+  calcularFolha: boolean;
+  fecharReabrirFolha: boolean;
+  homologarRescisao: boolean;
+  transmitirEsocial: boolean;
+}
+
+export interface PerfilPermissaoConfig {
+  label: string;
+  subtitulo: string;
+  descricao: string;
+  modulos: Record<ModuloSistemaId, boolean>;
+  acoes: AcoesPermissao;
+}
+
+export interface ConfiguracaoAcessoSistema {
+  operadorNome: string;
+  portalEmpregadoId: string;
+  perfis: Record<Exclude<UserRole, 'employee'>, PerfilPermissaoConfig>;
+}
+
 export interface UserSession {
   id: string;
   name: string;

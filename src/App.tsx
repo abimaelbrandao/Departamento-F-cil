@@ -15,6 +15,9 @@ import {
   StatusCompetencia,
   LancamentoVariavel,
   RescisaoSimulada,
+  AcoesPermissao,
+  ConfiguracaoAcessoSistema,
+  ModuloSistemaId,
 } from './types/dp';
 import { api } from './services/api';
 import { formatarMoeda, formatarData, formatarCPF, formatarCompetenciaExtenso } from './utils/formatters';
@@ -47,6 +50,11 @@ import { AddEventModal } from './components/AddEventModal';
 import { EmployeeActionModal } from './components/EmployeeActionModal';
 import { BatchPayrollModal } from './components/BatchPayrollModal';
 import { LaborRightsGuideModal } from './components/LaborRightsGuideModal';
+import {
+  AccessControlModal,
+  carregarConfiguracaoAcesso,
+  salvarConfiguracaoAcesso,
+} from './components/AccessControlModal';
 import {
   Building2,
   Users,
@@ -92,6 +100,9 @@ import {
   RotateCcw,
   Download,
   BookOpen,
+  SlidersHorizontal,
+  Briefcase,
+  User,
 } from 'lucide-react';
 
 const EMPRESA_PADRAO: Empresa = {
@@ -134,14 +145,15 @@ export default function App() {
   const { theme, setTheme } = useTheme();
   const [menuTemaAberto, setMenuTemaAberto] = useState(false);
 
-  // Estado global do usuário e contexto de trabalho
+  // Estado global do usuário, controle de acesso e contexto de trabalho
   const [usuarioRole, setUsuarioRole] = useState<UserRole>('dp_operator');
+  const [configAcesso, setConfigAcesso] = useState<ConfiguracaoAcessoSistema>(() => carregarConfiguracaoAcesso());
+  const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
+  const [modalAjustarAcessoAberto, setModalAjustarAcessoAberto] = useState(false);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaAtivaId, setEmpresaAtivaId] = useState<string>('');
   const [competenciaAtiva, setCompetenciaAtiva] = useState<string>('05/2026');
-  const [abaNavegacao, setAbaNavegacao] = useState<
-    'DASHBOARD' | 'FOLHA' | 'EMPREGADOS' | 'FERIAS' | 'RESCISAO' | 'CONTRATOS' | 'MOVIMENTACOES' | 'ESOCIAL'
-  >('DASHBOARD');
+  const [abaNavegacao, setAbaNavegacao] = useState<ModuloSistemaId>('DASHBOARD');
 
   // Gestão de Empresas
   const [modalEmpresasAberto, setModalEmpresasAberto] = useState(false);
@@ -352,8 +364,40 @@ export default function App() {
 
   const empresaAtiva = empresas.find(e => e.id === empresaAtivaId) || (empresas.length > 0 ? empresas[0] : null);
 
+  const roleNaoEmpregado = usuarioRole === 'employee' ? 'dp_operator' : usuarioRole;
+  const perfilAtivoConfig = configAcesso.perfis[roleNaoEmpregado];
+  const operadorAuditoria = `${configAcesso.operadorNome || 'Operador de DP'} (${perfilAtivoConfig.label})`;
+
+  const verificarPermissao = (acao: keyof AcoesPermissao, descricaoAcao: string): boolean => {
+    if (perfilAtivoConfig.acoes[acao]) return true;
+    mostrarNotificacao(
+      `O perfil "${perfilAtivoConfig.label}" não possui permissão para ${descricaoAcao}. Ajuste em Perfil > Ajustar Acessos.`,
+      'erro'
+    );
+    return false;
+  };
+
+  useEffect(() => {
+    if (usuarioRole === 'employee') return;
+    if (!perfilAtivoConfig.modulos[abaNavegacao]) {
+      const ordemModulos: ModuloSistemaId[] = [
+        'DASHBOARD',
+        'FOLHA',
+        'EMPREGADOS',
+        'FERIAS',
+        'RESCISAO',
+        'CONTRATOS',
+        'MOVIMENTACOES',
+        'ESOCIAL',
+      ];
+      const primeiroPermitido = ordemModulos.find(m => perfilAtivoConfig.modulos[m]) || 'DASHBOARD';
+      setAbaNavegacao(primeiroPermitido);
+    }
+  }, [usuarioRole, configAcesso, abaNavegacao, perfilAtivoConfig]);
+
   // Ações da Folha e Competência
   const handleCalcularFolhaCompleta = async () => {
+    if (!verificarPermissao('calcularFolha', 'calcular ou recalcular a folha de pagamento')) return;
     try {
       setProcessandoFolha(true);
       await api.calcularFolha({
@@ -373,12 +417,13 @@ export default function App() {
   };
 
   const handleAvancarEtapa = async (novoStatus: StatusCompetencia) => {
+    if (!verificarPermissao('fecharReabrirFolha', 'avançar ou aprovar etapas da competência')) return;
     try {
       await api.atualizarStatusCompetencia({
         empresaId: empresaAtivaId,
         competencia: competenciaAtiva,
         status: novoStatus,
-        usuario: 'Operador de DP',
+        usuario: operadorAuditoria,
       });
       await carregarDadosCompetencia();
       mostrarNotificacao(`Folha avançada para a etapa: ${novoStatus.replace('_', ' ')}`, 'sucesso');
@@ -389,11 +434,12 @@ export default function App() {
 
   const handleFecharCompetencia = async () => {
     if (!folhaData) return;
+    if (!verificarPermissao('fecharReabrirFolha', 'fechar e encerrar a competência')) return;
     try {
       await api.aprovarFecharCompetencia({
         empresaId: empresaAtivaId,
         competencia: competenciaAtiva,
-        usuario: 'Operador de DP',
+        usuario: operadorAuditoria,
       });
       await carregarDadosCompetencia();
       mostrarNotificacao('Competência fechada com sucesso! Eventos S-1200 e S-1210 encaminhados ao eSocial.', 'sucesso');
@@ -403,6 +449,7 @@ export default function App() {
   };
 
   const handleReabrirCompetencia = async () => {
+    if (!verificarPermissao('fecharReabrirFolha', 'reabrir uma folha já fechada')) return;
     if (!motivoReabertura.trim()) {
       mostrarNotificacao('A justificativa é obrigatória para reabrir uma folha fechada.', 'erro');
       return;
@@ -412,7 +459,7 @@ export default function App() {
         empresaId: empresaAtivaId,
         competencia: competenciaAtiva,
         motivo: motivoReabertura,
-        usuario: 'Operador de DP',
+        usuario: operadorAuditoria,
       });
       setModalReaberturaAberto(false);
       setMotivoReabertura('');
@@ -424,6 +471,7 @@ export default function App() {
   };
 
   const handleTransmitirESocial = async (eventoId: string) => {
+    if (!verificarPermissao('transmitirEsocial', 'transmitir eventos ao eSocial')) return;
     try {
       await api.transmitirESocial(eventoId);
       await carregarDadosCompetencia();
@@ -498,9 +546,11 @@ export default function App() {
     }
   };
 
-  // Se o perfil selecionado for 'employee', exibe o portal do colaborador
+  // Se o perfil selecionado for 'employee', exibe o portal do colaborador selecionado
   if (usuarioRole === 'employee') {
-    const colaboradorLogado = empregados[0] || {
+    const colaboradorLogado =
+      empregados.find(e => e.id === configAcesso.portalEmpregadoId) ||
+      empregados[0] || {
       id: 'emp-lucas',
       matricula: '00101',
       nomeCompleto: 'Lucas Gabriel de Albuquerque',
@@ -564,7 +614,7 @@ export default function App() {
   const statusComp: StatusCompetencia = folhaData?.competencia?.status || 'ABERTA';
   const temCalculo = Boolean(folhaData && folhaData.folhas && folhaData.folhas.length > 0);
 
-  // Módulos agrupados por rotina para a barra lateral
+  // Módulos agrupados por rotina para a barra lateral (filtrados pelas permissões do perfil ativo)
   const rotinasModulos = [
     {
       grupo: 'Rotinas Mensais',
@@ -589,7 +639,12 @@ export default function App() {
         { id: 'ESOCIAL' as const, label: 'eSocial & Obrigações', icon: FileCheck2 },
       ],
     },
-  ];
+  ]
+    .map(grupo => ({
+      ...grupo,
+      itens: grupo.itens.filter(item => perfilAtivoConfig.modulos[item.id]),
+    }))
+    .filter(grupo => grupo.itens.length > 0);
 
   // Reordenação da Agenda de Prazos: Atrasados primeiro, seguidos por ordem cronológica
   const agendaOrdenada = [...agenda].sort((a, b) => {
@@ -604,34 +659,50 @@ export default function App() {
     return new Date(a.dataLimite).getTime() - new Date(b.dataLimite).getTime();
   });
 
+  const abrirModuloComPermissao = (modulo: ModuloSistemaId, nomeModulo: string) => {
+    if (!perfilAtivoConfig.modulos[modulo]) {
+      mostrarNotificacao(
+        `O módulo "${nomeModulo}" está desabilitado para o perfil "${perfilAtivoConfig.label}". Ajuste em Perfil > Ajustar Acessos.`,
+        'erro'
+      );
+      return;
+    }
+    setAbaNavegacao(modulo);
+  };
+
   // Ação ao clicar no item da agenda
   const handleAcaoAgenda = (item: ItemAgendaObrigacao) => {
     if (item.empregadoId) {
       const emp = empregados.find(e => e.id === item.empregadoId);
       if (emp) {
         if (item.titulo.toLowerCase().includes('férias') || item.descricao.toLowerCase().includes('férias')) {
+          if (!perfilAtivoConfig.modulos.FERIAS) {
+            abrirModuloComPermissao('FERIAS', 'Férias & Afastamentos');
+            return;
+          }
           setModalFeriasEmpregado(emp);
           return;
         }
         if (item.titulo.toLowerCase().includes('rescis') || item.descricao.toLowerCase().includes('rescis') || item.titulo.toLowerCase().includes('trct')) {
+          if (!verificarPermissao('homologarRescisao', 'simular ou homologar rescisões')) return;
           setModalRescisaoEmpregado(emp);
           return;
         }
         if (item.titulo.toLowerCase().includes('experiência') || item.titulo.toLowerCase().includes('contrato')) {
-          setAbaNavegacao('CONTRATOS');
+          abrirModuloComPermissao('CONTRATOS', 'Contratos & Recibos');
           return;
         }
       }
     }
     if (item.titulo.toLowerCase().includes('folha') || item.titulo.toLowerCase().includes('fgts')) {
-      setAbaNavegacao('FOLHA');
+      abrirModuloComPermissao('FOLHA', 'Folha de Pagamento');
       return;
     }
     if (item.titulo.toLowerCase().includes('esocial') || item.titulo.toLowerCase().includes('dctfweb')) {
-      setAbaNavegacao('ESOCIAL');
+      abrirModuloComPermissao('ESOCIAL', 'eSocial & Obrigações');
       return;
     }
-    setAbaNavegacao('FOLHA');
+    abrirModuloComPermissao('FOLHA', 'Folha de Pagamento');
   };
 
   // Etapas visíveis do fluxo da competência
@@ -749,6 +820,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setMenuEmpresasAberto(false);
+                            if (!verificarPermissao('gerenciarEmpresas', 'cadastrar novas empresas')) return;
                             setModoEmpresasInicial('NOVA');
                             setEmpresaParaEditar(null);
                             setModalEmpresasAberto(true);
@@ -761,6 +833,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setMenuEmpresasAberto(false);
+                            if (!verificarPermissao('gerenciarEmpresas', 'gerenciar ou excluir empresas')) return;
                             setModoEmpresasInicial('LISTA');
                             setModalEmpresasAberto(true);
                           }}
@@ -911,7 +984,12 @@ export default function App() {
             {/* Controle de Aparência (Claro, Escuro, Automático) */}
             <div className="relative">
               <button
-                onClick={() => setMenuTemaAberto(!menuTemaAberto)}
+                onClick={() => {
+                  setMenuTemaAberto(!menuTemaAberto);
+                  setMenuPerfilAberto(false);
+                  setMenuEmpresasAberto(false);
+                  setMenuCompetenciasAberto(false);
+                }}
                 className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 sm:px-2.5 py-1.5 rounded-xl border border-slate-700 transition-colors"
                 title="Aparência: Claro, Escuro ou Automático"
                 aria-label="Selecionar tema visual"
@@ -978,18 +1056,147 @@ export default function App() {
               )}
             </div>
 
-            {/* Alternador de Perfil */}
-            <select
-              value={usuarioRole}
-              onChange={e => setUsuarioRole(e.target.value as UserRole)}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none cursor-pointer hidden sm:block"
-              title="Perfil de Acesso"
-            >
-              <option value="dp_operator">Operador DP</option>
-              <option value="admin">Administrador</option>
-              <option value="gestor">Gestor Empresa</option>
-              <option value="employee">Portal Empregado</option>
-            </select>
+            {/* Perfil de Acesso & Permissões */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setMenuPerfilAberto(!menuPerfilAberto);
+                  setMenuTemaAberto(false);
+                  setMenuEmpresasAberto(false);
+                  setMenuCompetenciasAberto(false);
+                }}
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs rounded-xl px-2.5 sm:px-3 py-1.5 border border-slate-700 transition-colors"
+                title="Perfil de Acesso & Controle de Permissões"
+              >
+                {usuarioRole === 'admin' ? (
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : usuarioRole === 'gestor' ? (
+                  <Briefcase className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                ) : (
+                  <UserCog className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                )}
+                <div className="hidden sm:flex flex-col items-start leading-tight text-left">
+                  <span className="font-bold text-[11px] text-white">{perfilAtivoConfig.label}</span>
+                  <span className="text-[9px] text-slate-400 hidden xl:block">
+                    {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/8 módulos ·{' '}
+                    {Object.values(perfilAtivoConfig.acoes).filter(Boolean).length}/6 ações
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </button>
+
+              {menuPerfilAberto && (
+                <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs text-slate-100">
+                  <div className="px-2.5 py-2 border-b border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Perfil de Acesso Ativo
+                      </div>
+                      <div className="text-[11px] text-slate-300 font-medium truncate max-w-[200px]">
+                        Operador: {configAcesso.operadorNome}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setMenuPerfilAberto(false);
+                        setModalAjustarAcessoAberto(true);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <SlidersHorizontal className="w-3 h-3" />
+                      Ajustar
+                    </button>
+                  </div>
+
+                  <div className="py-1.5 space-y-1">
+                    {(
+                      [
+                        { id: 'dp_operator' as const, icon: UserCog, cor: 'text-blue-400' },
+                        { id: 'admin' as const, icon: ShieldCheck, cor: 'text-emerald-400' },
+                        { id: 'gestor' as const, icon: Briefcase, cor: 'text-amber-400' },
+                      ]
+                    ).map(item => {
+                      const cfg = configAcesso.perfis[item.id];
+                      const Icon = item.icon;
+                      const ativo = usuarioRole === item.id;
+                      const modCount = Object.values(cfg.modulos).filter(Boolean).length;
+                      const acaoCount = Object.values(cfg.acoes).filter(Boolean).length;
+
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setUsuarioRole(item.id);
+                            setMenuPerfilAberto(false);
+                            mostrarNotificacao(
+                              `Perfil alterado para ${cfg.label} (${modCount}/8 módulos e ${acaoCount}/6 ações habilitadas).`,
+                              'info'
+                            );
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-xl flex items-start justify-between gap-2 transition-colors ${
+                            ativo
+                              ? 'bg-blue-600/20 border border-blue-500/40 text-white'
+                              : 'hover:bg-slate-800 border border-transparent text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${item.cor}`} />
+                            <div className="min-w-0">
+                              <div className="font-bold flex items-center gap-1.5">
+                                <span>{cfg.label}</span>
+                                <span className="text-[9px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                                  {modCount}M·{acaoCount}A
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 leading-snug mt-0.5">
+                                {cfg.subtitulo}
+                              </div>
+                            </div>
+                          </div>
+                          {ativo && <Check className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />}
+                        </button>
+                      );
+                    })}
+
+                    <div className="border-t border-slate-800 my-1 pt-1">
+                      <button
+                        onClick={() => {
+                          setUsuarioRole('employee');
+                          setMenuPerfilAberto(false);
+                        }}
+                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-800 flex items-start justify-between gap-2 text-slate-200 transition-colors"
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <User className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <div className="font-bold">Portal Empregado</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[210px]">
+                              Visualizar como:{' '}
+                              {(empregados.find(e => e.id === configAcesso.portalEmpregadoId) || empregados[0])
+                                ?.nomeCompleto || 'Colaborador padrão'}
+                            </div>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-1" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-1.5">
+                    <button
+                      onClick={() => {
+                        setMenuPerfilAberto(false);
+                        setModalAjustarAcessoAberto(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      Ajustar Acessos e Permissões
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -1094,6 +1301,38 @@ export default function App() {
               <button onClick={() => setNotificacao(null)} className="p-1 hover:opacity-70">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          )}
+
+          {/* Barra informativa quando o perfil ativo possui restrições configuradas */}
+          {(Object.values(perfilAtivoConfig.modulos).some(v => !v) ||
+            Object.values(perfilAtivoConfig.acoes).some(v => !v)) && (
+            <div className="px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>
+                  <strong>Perfil Ativo: {perfilAtivoConfig.label}</strong> — {perfilAtivoConfig.subtitulo} (
+                  {Object.values(perfilAtivoConfig.modulos).filter(Boolean).length}/8 módulos e{' '}
+                  {Object.values(perfilAtivoConfig.acoes).filter(Boolean).length}/6 ações críticas liberadas).
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setModalAjustarAcessoAberto(true)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  Ajustar Acessos
+                </button>
+                {usuarioRole !== 'dp_operator' && (
+                  <button
+                    onClick={() => setUsuarioRole('dp_operator')}
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 font-semibold text-[11px] hover:bg-amber-100 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Voltar p/ Operador DP
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1641,6 +1880,7 @@ export default function App() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => {
+                      if (!verificarPermissao('calcularFolha', 'adicionar ou editar eventos da folha')) return;
                       setEmpregadoPreSelecionadoEvento(null);
                       setLancamentoParaEditar(null);
                       setModalAddEventAberto(true);
@@ -1699,6 +1939,7 @@ export default function App() {
 
                   <button
                     onClick={() => {
+                      if (!verificarPermissao('calcularFolha', 'gerar folha por competência ou em lote')) return;
                       setModoGerarFolhaInicial('LOTE');
                       setModalGerarFolhaAberto(true);
                     }}
@@ -1770,6 +2011,7 @@ export default function App() {
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
                                   onClick={() => {
+                                    if (!verificarPermissao('calcularFolha', 'lançar eventos para colaboradores')) return;
                                     setEmpregadoPreSelecionadoEvento(empObj || null);
                                     setLancamentoParaEditar(null);
                                     setModalAddEventAberto(true);
@@ -1831,6 +2073,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
+                      if (!verificarPermissao('calcularFolha', 'adicionar eventos à folha')) return;
                       setEmpregadoPreSelecionadoEvento(null);
                       setLancamentoParaEditar(null);
                       setModalAddEventAberto(true);
@@ -1990,6 +2233,7 @@ export default function App() {
                                 <div className="flex items-center justify-center gap-1">
                                   <button
                                     onClick={() => {
+                                      if (!verificarPermissao('calcularFolha', 'editar eventos lançados na folha')) return;
                                       setEmpregadoPreSelecionadoEvento(emp || null);
                                       setLancamentoParaEditar(lanc);
                                       setModalAddEventAberto(true);
@@ -2087,7 +2331,10 @@ export default function App() {
                   </div>
 
                   <button
-                    onClick={() => setModalNovaAdmissaoAberto(true)}
+                    onClick={() => {
+                      if (!verificarPermissao('gerenciarEmpregados', 'admitir novos colaboradores')) return;
+                      setModalNovaAdmissaoAberto(true);
+                    }}
                     className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors whitespace-nowrap"
                   >
                     <Plus className="w-4 h-4" />
@@ -2165,6 +2412,7 @@ export default function App() {
 
                             <button
                               onClick={() => {
+                                if (!verificarPermissao('gerenciarEmpregados', 'editar dados cadastrais de colaboradores')) return;
                                 setEmpregadoAcaoSelecionado(emp);
                                 setModoEmployeeAction('EDICAO');
                                 setModalEmployeeActionAberto(true);
@@ -2177,6 +2425,7 @@ export default function App() {
 
                             <button
                               onClick={() => {
+                                if (!verificarPermissao('gerenciarEmpregados', 'alterar salários ou cargos de colaboradores')) return;
                                 setEmpregadoAcaoSelecionado(emp);
                                 setModoEmployeeAction('ALTERACAO_SALARIAL');
                                 setModalEmployeeActionAberto(true);
@@ -2189,6 +2438,7 @@ export default function App() {
 
                             <button
                               onClick={() => {
+                                if (!verificarPermissao('homologarRescisao', 'registrar desligamento ou rescisão')) return;
                                 setEmpregadoAcaoSelecionado(emp);
                                 setModoEmployeeAction('DESLIGAMENTO');
                                 setModalEmployeeActionAberto(true);
@@ -2201,6 +2451,7 @@ export default function App() {
 
                             <button
                               onClick={() => {
+                                if (!verificarPermissao('gerenciarEmpregados', 'excluir colaboradores')) return;
                                 setEmpregadoAcaoSelecionado(emp);
                                 setModoEmployeeAction('EXCLUSAO');
                                 setModalEmployeeActionAberto(true);
@@ -2528,14 +2779,20 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                           <button
-                            onClick={() => setModalRescisaoEmpregado(emp)}
+                            onClick={() => {
+                              if (!verificarPermissao('homologarRescisao', 'gerar TRCT e homologar rescisões')) return;
+                              setModalRescisaoEmpregado(emp);
+                            }}
                             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             Gerar TRCT e Homologação
                           </button>
                           <button
-                            onClick={() => setModalRescisaoEmpregado(emp)}
+                            onClick={() => {
+                              if (!verificarPermissao('homologarRescisao', 'simular rescisões')) return;
+                              setModalRescisaoEmpregado(emp);
+                            }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
                           >
                             <Calculator className="w-3.5 h-3.5" />
@@ -2620,6 +2877,7 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => {
+                                  if (!verificarPermissao('homologarRescisao', 'cancelar uma rescisão homologada')) return;
                                   setMotivoCancelamentoRescisao('');
                                   setModalCancelarRescisao({ empregado: emp, rescisao: resc });
                                 }}
@@ -2904,43 +3162,49 @@ export default function App() {
     </main>
       </div>
 
-      {/* 3. NAVEGAÇÃO INFERIOR PARA CELULAR (md:hidden): Início, Folha, Pessoas e Mais */}
+      {/* 3. NAVEGAÇÃO INFERIOR PARA CELULAR (md:hidden): respeita os módulos habilitados no perfil */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-xl flex items-center justify-around py-2 px-1 md:hidden select-none">
-        <button
-          onClick={() => setAbaNavegacao('DASHBOARD')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
-            abaNavegacao === 'DASHBOARD'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <CalendarDays className="w-5 h-5 mb-0.5" />
-          <span>Início</span>
-        </button>
+        {perfilAtivoConfig.modulos.DASHBOARD && (
+          <button
+            onClick={() => setAbaNavegacao('DASHBOARD')}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
+              abaNavegacao === 'DASHBOARD'
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <CalendarDays className="w-5 h-5 mb-0.5" />
+            <span>Início</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setAbaNavegacao('FOLHA')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
-            abaNavegacao === 'FOLHA'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <Receipt className="w-5 h-5 mb-0.5" />
-          <span>Folha</span>
-        </button>
+        {perfilAtivoConfig.modulos.FOLHA && (
+          <button
+            onClick={() => setAbaNavegacao('FOLHA')}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
+              abaNavegacao === 'FOLHA'
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Receipt className="w-5 h-5 mb-0.5" />
+            <span>Folha</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setAbaNavegacao('EMPREGADOS')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
-            abaNavegacao === 'EMPREGADOS'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <Users className="w-5 h-5 mb-0.5" />
-          <span>Pessoas</span>
-        </button>
+        {perfilAtivoConfig.modulos.EMPREGADOS && (
+          <button
+            onClick={() => setAbaNavegacao('EMPREGADOS')}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-bold transition-colors ${
+              abaNavegacao === 'EMPREGADOS'
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-5 h-5 mb-0.5" />
+            <span>Pessoas</span>
+          </button>
+        )}
 
         <button
           onClick={() => setMobileDrawerAberto(true)}
@@ -2960,9 +3224,14 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end md:hidden">
           <div className="bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 p-5 space-y-4 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                Todos os Módulos do Sistema
-              </h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Módulos Liberados ({perfilAtivoConfig.label})
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {perfilAtivoConfig.subtitulo}
+                </p>
+              </div>
               <button
                 onClick={() => setMobileDrawerAberto(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
@@ -2972,71 +3241,88 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                onClick={() => { setAbaNavegacao('FERIAS'); setMobileDrawerAberto(false); }}
-                className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
-                  abaNavegacao === 'FERIAS'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <Palmtree className="w-4 h-4 shrink-0" />
-                Férias & Afastamentos
-              </button>
+              {perfilAtivoConfig.modulos.FERIAS && (
+                <button
+                  onClick={() => { setAbaNavegacao('FERIAS'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
+                    abaNavegacao === 'FERIAS'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <Palmtree className="w-4 h-4 shrink-0" />
+                  Férias & Afastamentos
+                </button>
+              )}
 
-              <button
-                onClick={() => { setAbaNavegacao('RESCISAO'); setMobileDrawerAberto(false); }}
-                className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
-                  abaNavegacao === 'RESCISAO'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <UserX className="w-4 h-4 shrink-0" />
-                Rescisões & TRCT
-              </button>
+              {perfilAtivoConfig.modulos.RESCISAO && (
+                <button
+                  onClick={() => { setAbaNavegacao('RESCISAO'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
+                    abaNavegacao === 'RESCISAO'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <UserX className="w-4 h-4 shrink-0" />
+                  Rescisões & TRCT
+                </button>
+              )}
 
-              <button
-                onClick={() => { setAbaNavegacao('CONTRATOS'); setMobileDrawerAberto(false); }}
-                className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
-                  abaNavegacao === 'CONTRATOS'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <FileText className="w-4 h-4 shrink-0" />
-                Contratos & Recibos
-              </button>
+              {perfilAtivoConfig.modulos.CONTRATOS && (
+                <button
+                  onClick={() => { setAbaNavegacao('CONTRATOS'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
+                    abaNavegacao === 'CONTRATOS'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  Contratos & Recibos
+                </button>
+              )}
 
-              <button
-                onClick={() => { setAbaNavegacao('MOVIMENTACOES'); setMobileDrawerAberto(false); }}
-                className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
-                  abaNavegacao === 'MOVIMENTACOES'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <UploadCloud className="w-4 h-4 shrink-0" />
-                Movimentações & Ponto
-              </button>
+              {perfilAtivoConfig.modulos.MOVIMENTACOES && (
+                <button
+                  onClick={() => { setAbaNavegacao('MOVIMENTACOES'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors ${
+                    abaNavegacao === 'MOVIMENTACOES'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <UploadCloud className="w-4 h-4 shrink-0" />
+                  Movimentações & Ponto
+                </button>
+              )}
 
-              <button
-                onClick={() => { setAbaNavegacao('ESOCIAL'); setMobileDrawerAberto(false); }}
-                className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors col-span-2 ${
-                  abaNavegacao === 'ESOCIAL'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <FileCheck2 className="w-4 h-4 shrink-0" />
-                eSocial, DCTFWeb & FGTS Digital
-              </button>
+              {perfilAtivoConfig.modulos.ESOCIAL && (
+                <button
+                  onClick={() => { setAbaNavegacao('ESOCIAL'); setMobileDrawerAberto(false); }}
+                  className={`p-3 rounded-xl border flex items-center gap-2.5 font-bold text-left transition-colors col-span-2 ${
+                    abaNavegacao === 'ESOCIAL'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <FileCheck2 className="w-4 h-4 shrink-0" />
+                  eSocial, DCTFWeb & FGTS Digital
+                </button>
+              )}
             </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <button
+                onClick={() => { setModalAjustarAcessoAberto(true); setMobileDrawerAberto(false); }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Ajustar Perfis e Permissões de Acesso
+              </button>
               <button
                 onClick={() => { setModalIAAberto(true); setMobileDrawerAberto(false); }}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors"
               >
                 <Sparkles className="w-4 h-4" />
                 Abrir Consultor Jurídico Trabalhista IA
@@ -3517,7 +3803,25 @@ export default function App() {
         }}
         onAbrirRescisao={(emp) => {
           setModalEmployeeActionAberto(false);
+          if (!verificarPermissao('homologarRescisao', 'simular ou homologar rescisões')) return;
           setModalRescisaoEmpregado(emp);
+        }}
+      />
+
+      {/* 16. Modal de Ajuste de Perfis e Permissões de Acesso */}
+      <AccessControlModal
+        isOpen={modalAjustarAcessoAberto}
+        onClose={() => setModalAjustarAcessoAberto(false)}
+        configAtual={configAcesso}
+        roleAtivo={usuarioRole}
+        empregados={empregados}
+        onSalvar={(novaConfig, novoRole) => {
+          setConfigAcesso(novaConfig);
+          salvarConfiguracaoAcesso(novaConfig);
+          if (novoRole) {
+            setUsuarioRole(novoRole);
+          }
+          mostrarNotificacao('Configurações de acesso e permissões atualizadas com sucesso!', 'sucesso');
         }}
       />
     </div>
